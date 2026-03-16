@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from lib.units import to_mm, parse_doc_units, parse_viewbox_scale
+from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 
 
 class TestToMm:
@@ -53,6 +53,36 @@ class TestParseDocUnits:
     def test_default_px(self):
         svg = ET.fromstring('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" />')
         assert parse_doc_units(svg) == "px"
+
+
+class TestParseViewboxBottom:
+    def test_viewbox_present(self):
+        svg = ET.fromstring(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 10 400 200" />'
+        )
+        assert parse_viewbox_bottom(svg) == pytest.approx(210.0)
+
+    def test_viewbox_origin_zero(self):
+        svg = ET.fromstring(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" />'
+        )
+        assert parse_viewbox_bottom(svg) == pytest.approx(300.0)
+
+    def test_height_fallback(self):
+        svg = ET.fromstring(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="400mm" height="250mm" />'
+        )
+        assert parse_viewbox_bottom(svg) == pytest.approx(250.0)
+
+    def test_no_viewbox_no_height(self):
+        svg = ET.fromstring('<svg xmlns="http://www.w3.org/2000/svg" />')
+        assert parse_viewbox_bottom(svg) == 0.0
+
+    def test_comma_separated_viewbox(self):
+        svg = ET.fromstring(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0,0,400,200" />'
+        )
+        assert parse_viewbox_bottom(svg) == pytest.approx(200.0)
 
 
 class TestParseViewboxScale:

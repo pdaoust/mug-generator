@@ -44,6 +44,28 @@ def parse_doc_units(svg_root) -> str:
     return "px"
 
 
+def parse_viewbox_bottom(svg_root) -> float:
+    """Return the bottom Y coordinate of the viewBox in SVG user units.
+
+    This is viewBox_y + viewBox_height.  If no viewBox is present,
+    falls back to the numeric part of the 'height' attribute, or 0.
+    """
+    viewbox = svg_root.get("viewBox")
+    if viewbox:
+        parts = viewbox.replace(",", " ").split()
+        if len(parts) == 4:
+            return float(parts[1]) + float(parts[3])
+
+    height_attr = svg_root.get("height", "")
+    numeric = ""
+    for ch in height_attr.strip():
+        if ch in "0123456789.+-eE":
+            numeric += ch
+        else:
+            break
+    return float(numeric) if numeric else 0.0
+
+
 def parse_viewbox_scale(svg_root, doc_units: str) -> float:
     """Compute the scale factor from SVG user units to doc_units.
 

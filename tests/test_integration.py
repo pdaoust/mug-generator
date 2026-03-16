@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from lib.svg_layers import get_layer_paths
-from lib.units import to_mm, parse_doc_units, parse_viewbox_scale
+from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 from lib.mug_surface import MugSurface
 from lib.openscad_params import compute_n
 from lib.rail_sampler import sample_rails, _cumulative_chord_lengths, _build_midpoint_curve
@@ -33,10 +33,12 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
 
     doc_units = parse_doc_units(svg_root)
     scale = parse_viewbox_scale(svg_root, doc_units)
+    vb_bottom = parse_viewbox_bottom(svg_root)
 
     def svg_to_mm(points):
         return [
-            (to_mm(p[0] * scale, doc_units), to_mm(-p[1] * scale, doc_units))
+            (to_mm(p[0] * scale, doc_units),
+             to_mm((vb_bottom - p[1]) * scale, doc_units))
             for p in points
         ]
 

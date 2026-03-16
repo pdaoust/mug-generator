@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <name>Mug Generator</name>
+  <id>org.pottery.mug_generator</id>
+
+  <param name="tab" type="notebook">
+
+    <page name="layers" gui-text="Layer setup">
+      <label appearance="header">Required layers</label>
+      <label>
+Create the following layers (exact names, case-insensitive):
+      </label>
+      <separator />
+
+      <label appearance="header">mug body</label>
+      <label>
+Two paths: outer profile and inner profile.
+Each is a half-profile polyline in the XZ plane (SVG X = radius,
+SVG Y = height). The mug axis of symmetry is at the leftmost X
+of the outer profile. The inner profile defines the hollow
+interior, lip shape, and floor thickness.
+      </label>
+      <separator />
+
+      <label appearance="header">handle rails</label>
+      <label>
+Two paths: inner rail (closer to mug) and outer rail (farther).
+Both are polylines in the same XZ plane as the mug body.
+The handle loft follows these rails from start to end.
+      </label>
+      <separator />
+
+      <label appearance="header">side rails</label>
+      <label>
+Two paths: left and right side rails.
+These control handle thickness (how far it protrudes from the
+drawing plane). X = half-width in mm. Y = position along the
+handle, at any convenient scale — the Y range of both side
+rails is mapped to 0 (start of handle) through 1 (end of
+handle) automatically.
+      </label>
+      <separator />
+
+      <label appearance="header">handle profile</label>
+      <label>
+One closed path: the cross-section shape of the handle.
+Drawn at any convenient size — it will be normalised and
+scaled per-station by the rail geometry. Winding direction
+is corrected automatically.
+      </label>
+    </page>
+
+    <page name="settings" gui-text="Settings">
+      <param name="output_dir" type="path" mode="folder"
+             gui-text="Output directory:"
+             gui-description="Directory for generated OpenSCAD files" />
+
+      <separator />
+      <label appearance="header">OpenSCAD resolution</label>
+
+      <param name="fn" type="int" min="0" max="360" gui-text="$fn (0=auto):"
+             gui-description="Fixed number of segments (overrides $fa/$fs when > 0)">0</param>
+      <param name="fa" type="float" min="0.1" max="180" precision="1"
+             gui-text="$fa (min angle):"
+             gui-description="Minimum angle per segment in degrees">12.0</param>
+      <param name="fs" type="float" min="0.01" max="100" precision="2"
+             gui-text="$fs (min size mm):"
+             gui-description="Minimum segment length in mm">2.0</param>
+
+      <separator />
+      <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>
+    </page>
+
+  </param>
+
+  <effect>
+    <object-type>all</object-type>
+    <effects-menu>
+      <submenu name="Generate from Path"/>
+    </effects-menu>
+  </effect>
+
+  <script>
+    <command location="inx" interpreter="python">mug_generator.py</command>
+  </script>
+</inkscape-extension>

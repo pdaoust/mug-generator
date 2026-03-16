@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd"
+     width="200mm" height="200mm" viewBox="0 0 200 200">
+
+  <sodipodi:namedview inkscape:document-units="mm" />
+
+  <!-- Mug body: outer and inner profiles -->
+  <!-- SVG Y down → 3D Z up, so y=20→z=180, y=180→z=20 -->
+  <g inkscape:groupmode="layer" inkscape:label="mug body">
+    <!-- Outer profile -->
+    <path d="M 30,20 L 35,20 L 35,180 L 30,180" />
+    <!-- Inner profile (offset inward by ~3mm wall, shorter for floor) -->
+    <path d="M 30,23 L 32,23 L 32,180 L 30,180" />
+  </g>
+
+  <!-- Handle rails: inner at x=35 (on mug surface), outer at x=55 -->
+  <!-- Simple vertical rails from y=50 to y=150 -->
+  <g inkscape:groupmode="layer" inkscape:label="handle rails">
+    <!-- Inner rail (closer to mug) -->
+    <path d="M 35,50 L 40,80 L 42,100 L 40,120 L 35,150" />
+    <!-- Outer rail (farther from mug) -->
+    <path d="M 55,50 L 60,80 L 62,100 L 60,120 L 55,150" />
+  </g>
+
+  <!-- Side rails: X=half-width in mm, Y=arc-length fraction [0,1] scaled to viewbox -->
+  <!-- Width tapers from 3mm at ends to 6mm in middle -->
+  <g inkscape:groupmode="layer" inkscape:label="side rails">
+    <!-- Left rail -->
+    <path d="M 3,0 L 6,100 L 3,200" />
+    <!-- Right rail -->
+    <path d="M 3,0 L 6,100 L 3,200" />
+  </g>
+
+  <!-- Handle profile: simple elliptical cross-section approximated as rectangle -->
+  <g inkscape:groupmode="layer" inkscape:label="handle profile">
+    <path d="M 0,0 L 10,0 L 10,8 L 0,8 Z" />
+  </g>
+
+</svg>

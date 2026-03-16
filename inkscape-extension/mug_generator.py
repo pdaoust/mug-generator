@@ -76,8 +76,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "desc": "inner rail (near mug) and outer rail (far from mug)",
             },
             "side rails": {
-                "min": 2, "max": 2,
-                "desc": "left and right side rails (X = half-width, Y = position along handle)",
+                "min": 1, "max": 1,
+                "desc": "one side rail path (X = half-width, Y = position along handle)",
             },
             "handle profile": {
                 "min": 1, "max": 1,
@@ -127,11 +127,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
         inner_rail_mm = svg_to_mm(handle_rail_paths[0])
         outer_rail_mm = svg_to_mm(handle_rail_paths[1])
 
-        # Side rails: X = half-width in mm, Y in mm (normalized to [0,1] later)
-        left_side = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
+        # Side rail: X = half-width in mm, Y in mm (normalized to [0,1] later)
+        # Single rail is used for both left and right (symmetric handle).
+        side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
                      for p in side_rail_paths[0]]
-        right_side = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
-                      for p in side_rail_paths[1]]
 
         # Handle profile: raw 2D shape (no coordinate inversion)
         handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
@@ -155,8 +154,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Sample rails
         stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
 
-        # Apply side rails
-        stations = apply_side_rails(stations, left_side, right_side)
+        # Apply side rails (same rail for both sides — symmetric handle)
+        stations = apply_side_rails(stations, side_rail, side_rail)
 
         # Generate handle cross-sections (endcap profiles wrap onto mug cylinder)
         handle_stations_3d = generate_handle_stations(
@@ -166,10 +165,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
         )
 
         # Build mug profiles for OpenSCAD — raw polygon vertices in path
-        # order (not z-sorted).  The axis offset is subtracted so X = radius.
-        axis_x = mug_surface.axis_x
-        scad_outer_profile = [[p[0] - axis_x, p[1]] for p in mug_outer_mm]
-        scad_inner_profile = [[p[0] - axis_x, p[1]] for p in mug_inner_mm]
+        # order (not z-sorted).  X = radius from the document origin (mug axis).
+        scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
+        scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
 
         # Build output data
         data = {
@@ -192,7 +190,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         # Preview
         if self.options.preview:
-            draw_preview(svg, mug_outer_mm, stations, handle_stations_3d)
+            side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
+            draw_preview(svg, mug_outer_mm, stations, handle_stations_3d,
+                         side_rail_svg)
 
 
 if __name__ == "__main__":

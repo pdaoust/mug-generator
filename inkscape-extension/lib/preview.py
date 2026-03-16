@@ -17,6 +17,7 @@ INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 
 PREVIEW_LABEL = "_preview"
 PREVIEW_STYLE = "fill:magenta;fill-opacity:0.3;stroke:magenta;stroke-width:0.5;stroke-opacity:0.6"
+SIDE_RAIL_STYLE = "fill:green;fill-opacity:0.3;stroke:green;stroke-width:0.5;stroke-opacity:0.6"
 INDICATOR_STYLE = "fill:none;stroke:red;stroke-width:1;stroke-opacity:0.8"
 
 
@@ -72,6 +73,7 @@ def draw_preview(
     mug_profile_mm: list[tuple[float, float]],
     stations: list["Station"],
     handle_stations_3d: list[list[tuple[float, float, float]]],
+    side_rail_svg: list[tuple[float, float]] | None = None,
 ) -> None:
     """Draw preview geometry into the _preview layer.
 
@@ -82,19 +84,29 @@ def draw_preview(
         mug_profile_mm: Mug profile as [(x_mm, z_mm), ...] in document coords.
         stations: Sampled handle stations.
         handle_stations_3d: 3D handle cross-section polygons.
+        side_rail_svg: Side rail as [(x, y), ...] in SVG user units.
     """
     layer = _find_or_create_preview_layer(svg)
 
     # Mug body silhouette: draw the profile polyline (mirrored for full silhouette)
     if mug_profile_mm:
         right_side = [(p[0], -p[1]) for p in mug_profile_mm]  # un-invert Y back to SVG
-        left_side = [(-p[0] + 2 * min(pt[0] for pt in mug_profile_mm), -p[1])
-                     for p in mug_profile_mm]
+        left_side = [(-p[0], -p[1]) for p in mug_profile_mm]  # mirror across x=0
 
         silhouette = right_side + list(reversed(left_side))
         d = _points_to_path_d(silhouette)
         if d:
             _add_path(layer, d, PREVIEW_STYLE)
+
+    # Side rail width profile: mirror the rail across x=0 to form a filled polygon
+    if side_rail_svg:
+        sorted_rail = sorted(side_rail_svg, key=lambda p: p[1])
+        right_edge = [(p[0], p[1]) for p in sorted_rail]
+        left_edge = [(-p[0], p[1]) for p in reversed(sorted_rail)]
+        polygon = right_edge + left_edge
+        d = _points_to_path_d(polygon)
+        if d:
+            _add_path(layer, d, SIDE_RAIL_STYLE)
 
     # Handle footprint: project 3D cross-sections to XZ plane (SVG X, -Z for SVG Y)
     if handle_stations_3d:

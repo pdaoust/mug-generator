@@ -36,10 +36,31 @@ module mug_body() {
     }
 }
 
-// --- Handle (lofted skin) ---
+// --- Handle (lofted skin with endcaps) ---
+// Extra sunken stations at each end push 1 mm radially inward so the
+// handle plugs into the mug wall for a clean boolean overlap.
+// caps=true lets BOSL2 triangulate and close the ends internally,
+// ensuring proper vertex sharing between skin walls and endcaps.
+
+function nudge_radial(pts, axis_x, amount) =
+    [for(p = pts)
+        let(
+            dx = p[0] - axis_x,
+            dy = p[1],
+            r = norm([dx, dy]),
+            scale = r > 0.001 ? (r + amount) / r : 1
+        )
+        [axis_x + dx * scale, dy * scale, p[2]]
+    ];
+
+handle_stations_extended = concat(
+    [nudge_radial(handle_stations[0], mug_axis_x, -1)],
+    handle_stations,
+    [nudge_radial(handle_stations[len(handle_stations)-1], mug_axis_x, -1)]
+);
 
 module handle() {
-    skin(handle_stations, slices=0, caps=false, method="reindex");
+    skin(handle_stations_extended, slices=0, caps=true, method="reindex");
 }
 
 // --- Assembly ---

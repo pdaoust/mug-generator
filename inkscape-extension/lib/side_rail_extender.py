@@ -1,8 +1,6 @@
-"""Side rail interpolation and handle-to-mug penetration calculation."""
+"""Side rail interpolation for handle width profiles."""
 
 from __future__ import annotations
-
-import math
 
 
 def _interp_1d(xs: list[float], ys: list[float], x: float) -> float:
@@ -73,99 +71,6 @@ def _side_rail_half_width_at(
     left_w = _interp_1d(left_fracs, left_widths, frac)
     right_w = _interp_1d(right_fracs, right_widths, frac)
     return (abs(left_w) + abs(right_w)) / 2
-
-
-def penetration_depth(mug_radius: float, half_width: float) -> float:
-    """Calculate how far the rail endpoints must extend into the mug body.
-
-    At a given Z height, the mug cross-section is a circle of radius R.
-    The handle cross-section extends ±half_width in Y from the centerline.
-    For the handle edges to be flush with the circular mug surface, the
-    centerline must be at X = sqrt(R² - w²).  The penetration distance
-    from the surface (at X = R) inward is:
-
-        R - sqrt(R² - w²)  =  R · (1 - cos(arcsin(w / R)))
-
-    If w >= R the handle is wider than the mug, so we clamp to R
-    (full penetration to the axis).
-
-    Args:
-        mug_radius: Outer mug body radius at this Z height, in mm.
-        half_width: Handle half-width from side rails, in mm.
-
-    Returns:
-        Penetration distance in mm (always >= 0).
-    """
-    if mug_radius <= 0:
-        return 0.0
-    if half_width >= mug_radius:
-        return mug_radius
-    return mug_radius - math.sqrt(mug_radius ** 2 - half_width ** 2)
-
-
-def extend_rails_into_body(
-    inner: list[tuple[float, float]],
-    outer: list[tuple[float, float]],
-    left_rail: list[tuple[float, float]],
-    right_rail: list[tuple[float, float]],
-    mug_outer_radius_at_z,
-) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
-    """Extend inner/outer rail endpoints horizontally into the mug body.
-
-    Prepends/appends a horizontal segment to each rail so that the
-    handle skin penetrates the mug body deeply enough for the side
-    rail edges to be flush with the mug surface.
-
-    The side rails are not modified — they map to the full length of
-    the extended midpoint curve via normal arc-length normalization,
-    so the cross-section maintains its width through the extension.
-
-    Args:
-        inner: Inner rail polyline [(x, z), ...] in mm.
-        outer: Outer rail polyline [(x, z), ...] in mm.
-        left_rail: Left side rail [(half_width, y_position), ...].
-        right_rail: Right side rail [(half_width, y_position), ...].
-        mug_outer_radius_at_z: Callable(z) -> radius in mm, or None.
-            Should return the outer mug body radius at the given Z height.
-            This is the absolute radius (not relative to axis).
-
-    Returns:
-        (extended_inner, extended_outer) with horizontal segments added.
-    """
-    if mug_outer_radius_at_z is None:
-        return inner, outer
-
-    left_fracs, left_widths, right_fracs, right_widths = _normalize_side_rails(
-        left_rail, right_rail
-    )
-
-    def extend_rail(rail, frac):
-        """Extend one end of a rail inward by the penetration depth."""
-        x, z = rail[0] if frac == 0.0 else rail[-1]
-        w = _side_rail_half_width_at(
-            left_fracs, left_widths, right_fracs, right_widths, frac
-        )
-        r = mug_outer_radius_at_z(z)
-        if r is None or r <= 0:
-            return rail
-
-        depth = penetration_depth(r, w)
-        if depth < 1e-6:
-            return rail
-
-        # Extend horizontally toward the axis (decreasing X)
-        new_point = (x - depth, z)
-        if frac == 0.0:
-            return [new_point] + list(rail)
-        else:
-            return list(rail) + [new_point]
-
-    inner_ext = extend_rail(inner, 0.0)
-    inner_ext = extend_rail(inner_ext, 1.0)
-    outer_ext = extend_rail(outer, 0.0)
-    outer_ext = extend_rail(outer_ext, 1.0)
-
-    return inner_ext, outer_ext
 
 
 def apply_side_rails(

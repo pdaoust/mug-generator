@@ -78,15 +78,16 @@ def apply_side_rails(
     left_rail: list[tuple[float, float]],
     right_rail: list[tuple[float, float]],
 ) -> list:
-    """Fill in sz (profile half-width) for each station from side rails.
+    """Fill in sz (profile full width) for each station from side rails.
 
     Side rails are in the coordinate space:
-    - X = profile half-width in mm
+    - X = half-width in mm (distance from handle center to edge)
     - Y = arbitrary position along the handle (will be normalized to [0,1])
 
     The Y values of both side rails are normalized together: the overall
     min Y maps to 0 (start of handle) and max Y maps to 1 (end of handle).
-    The average of left and right rail widths at each station gives sz.
+    sz is set to twice the average half-width (i.e. the full width), since
+    the normalized profile spans [-0.5, 0.5].
 
     Args:
         stations: Stations with arc_length_fraction set.
@@ -101,9 +102,10 @@ def apply_side_rails(
     )
 
     for station in stations:
-        station.sz = _side_rail_half_width_at(
+        half_w = _side_rail_half_width_at(
             left_fracs, left_widths, right_fracs, right_widths,
             station.arc_length_fraction,
         )
+        station.sz = 2.0 * half_w
 
     return stations

@@ -7,34 +7,33 @@ class MugSurface:
     """Represents a mug body as an axially symmetric half-profile.
 
     The profile is a polyline of (radius, z) points in mm.
-    The mug axis is at the minimum X of the raw profile; all stored
-    radii are relative to that axis.
+    The mug axis is at the document X origin (x=0); all stored
+    radii are the raw X coordinates.
     """
 
     def __init__(self, raw_profile: list[list[float]]) -> None:
         """Initialize from raw profile points [[x, z], ...].
 
         Args:
-            raw_profile: Points where x is distance from SVG left edge
-                         and z is height. Y is already inverted (z up).
+            raw_profile: Points where x is distance from the document
+                         X origin (the mug axis) and z is height.
         """
         if len(raw_profile) < 2:
             raise ValueError("Mug profile must have at least 2 points")
 
-        axis_x = min(p[0] for p in raw_profile)
-        self.axis_x = axis_x
+        self.axis_x = 0.0
 
         # Store as (radius, z) sorted by z ascending
         self.profile: list[tuple[float, float]] = sorted(
-            ((p[0] - axis_x, p[1]) for p in raw_profile),
+            ((p[0], p[1]) for p in raw_profile),
             key=lambda p: p[1],
         )
 
         for r, z in self.profile:
             if r < -1e-9:
                 raise ValueError(
-                    f"Profile point has negative radius {r:.4f} at z={z:.4f} "
-                    f"(axis_x={axis_x:.4f}). All points must be at or right of the axis."
+                    f"Profile point has negative radius {r:.4f} at z={z:.4f}. "
+                    f"All points must be at or right of the document X origin."
                 )
 
     @property

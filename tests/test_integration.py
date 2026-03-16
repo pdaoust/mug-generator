@@ -50,10 +50,8 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
     inner_rail_mm = svg_to_mm(handle_rail_paths[0])
     outer_rail_mm = svg_to_mm(handle_rail_paths[1])
 
-    left_side = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
+    side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
                  for p in side_rail_paths[0]]
-    right_side = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
-                  for p in side_rail_paths[1]]
 
     handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
@@ -70,7 +68,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
     n_stations = max(n_stations, 5)
 
     stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
-    stations = apply_side_rails(stations, left_side, right_side)
+    stations = apply_side_rails(stations, side_rail, side_rail)
 
     handle_stations_3d = generate_handle_stations(
         handle_profile, stations,
@@ -78,10 +76,9 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
         mug_radius_at_z=mug_true_radius_at_z,
     )
 
-    # Raw polygon vertices in path order, axis offset subtracted
-    axis_x = mug_surface.axis_x
-    scad_outer_profile = [[p[0] - axis_x, p[1]] for p in mug_outer_mm]
-    scad_inner_profile = [[p[0] - axis_x, p[1]] for p in mug_inner_mm]
+    # Raw polygon vertices in path order — X = radius from document origin
+    scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
+    scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
 
     data = {
         "mug_outer_profile": scad_outer_profile,

@@ -16,9 +16,9 @@ Create the following layers (exact names, case-insensitive):
       <label>
 Two paths: outer profile and inner profile.
 Each is a half-profile polyline in the XZ plane (SVG X = radius,
-SVG Y = height). The mug axis of symmetry is at the leftmost X
-of the outer profile. The inner profile defines the hollow
-interior, lip shape, and floor thickness.
+SVG Y = height). The mug axis of symmetry is at the document
+X origin (x=0). The inner profile defines the hollow interior,
+lip shape, and floor thickness.
       </label>
       <separator />
 
@@ -32,12 +32,12 @@ The handle loft follows these rails from start to end.
 
       <label appearance="header">side rails</label>
       <label>
-Two paths: left and right side rails.
-These control handle thickness (how far it protrudes from the
-drawing plane). X = half-width in mm. Y = position along the
-handle, at any convenient scale — the Y range of both side
-rails is mapped to 0 (start of handle) through 1 (end of
-handle) automatically.
+One path: side rail (symmetric — used for both sides).
+Controls handle width (how far it protrudes from the drawing
+plane). X = half-width from the document X origin. Y = position
+along the handle, at any convenient scale — the Y range is
+mapped to 0 (start of handle) through 1 (end of handle)
+automatically.
       </label>
       <separator />
 

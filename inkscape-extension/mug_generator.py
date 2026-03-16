@@ -196,9 +196,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         # Preview
         if self.options.preview:
+            mug_outer_svg = [(p[0] * scale, p[1] * scale) for p in mug_body_paths[0]]
             side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
-            draw_preview(svg, mug_outer_mm, stations, handle_stations_3d,
-                         side_rail_svg)
+            draw_preview(svg, mug_outer_svg, stations, handle_stations_3d,
+                         side_rail_svg, vb_bottom)
 
 
 if __name__ == "__main__":

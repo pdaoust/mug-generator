@@ -70,28 +70,28 @@ def _points_to_path_d(points: list[tuple[float, float]]) -> str:
 
 def draw_preview(
     svg,
-    mug_profile_mm: list[tuple[float, float]],
+    mug_profile_svg: list[tuple[float, float]],
     stations: list["Station"],
     handle_stations_3d: list[list[tuple[float, float, float]]],
     side_rail_svg: list[tuple[float, float]] | None = None,
+    vb_bottom: float = 0.0,
 ) -> None:
     """Draw preview geometry into the _preview layer.
 
-    All coordinates are in SVG user units (mm with Y already inverted for SVG).
-
     Args:
         svg: SVG root element.
-        mug_profile_mm: Mug profile as [(x_mm, z_mm), ...] in document coords.
+        mug_profile_svg: Mug outer profile as [(x, y), ...] in SVG user units.
         stations: Sampled handle stations.
         handle_stations_3d: 3D handle cross-section polygons.
         side_rail_svg: Side rail as [(x, y), ...] in SVG user units.
+        vb_bottom: Bottom Y of the viewBox (used to map 3D Z back to SVG Y).
     """
     layer = _find_or_create_preview_layer(svg)
 
     # Mug body silhouette: draw the profile polyline (mirrored for full silhouette)
-    if mug_profile_mm:
-        right_side = [(p[0], -p[1]) for p in mug_profile_mm]  # un-invert Y back to SVG
-        left_side = [(-p[0], -p[1]) for p in mug_profile_mm]  # mirror across x=0
+    if mug_profile_svg:
+        right_side = list(mug_profile_svg)
+        left_side = [(-p[0], p[1]) for p in mug_profile_svg]  # mirror across x=0
 
         silhouette = right_side + list(reversed(left_side))
         d = _points_to_path_d(silhouette)
@@ -108,17 +108,17 @@ def draw_preview(
         if d:
             _add_path(layer, d, SIDE_RAIL_STYLE)
 
-    # Handle footprint: project 3D cross-sections to XZ plane (SVG X, -Z for SVG Y)
+    # Handle footprint: project 3D cross-sections to XZ plane (SVG X, Z→SVG Y)
     if handle_stations_3d:
         for poly_3d in [handle_stations_3d[0], handle_stations_3d[-1]]:
-            pts_2d = [(p[0], -p[2]) for p in poly_3d]
+            pts_2d = [(p[0], vb_bottom - p[2]) for p in poly_3d]
             d = _points_to_path_d(pts_2d)
             if d:
                 _add_path(layer, d, INDICATOR_STYLE)
 
         # Draw handle path (centroids)
         if stations:
-            centroid_pts = [(s.centroid[0], -s.centroid[2]) for s in stations]
+            centroid_pts = [(s.centroid[0], vb_bottom - s.centroid[2]) for s in stations]
             parts = [f"M {centroid_pts[0][0]:.4f},{centroid_pts[0][1]:.4f}"]
             for p in centroid_pts[1:]:
                 parts.append(f"L {p[0]:.4f},{p[1]:.4f}")

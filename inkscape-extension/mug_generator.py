@@ -171,6 +171,33 @@ class MugGeneratorEffect(inkex.EffectExtension):
             self.options.fn, self.options.fa, self.options.fs, mid_total
         )
 
+        # Re-parse mug body and handle profile with bezier subdivision
+        # matching the revolution / loft resolution, so the surface
+        # texture is congruent in both directions.  Line segments are
+        # unaffected — only curves are resampled.
+        import math
+        from lib.units import to_mm as _to_mm
+
+        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
+                      - mug_surface.axis_x)
+        circumference = 2.0 * math.pi * avg_radius
+        n_rev = compute_n(self.options.fn, self.options.fa,
+                          self.options.fs, circumference)
+        body_seg_len = circumference / n_rev
+        handle_seg_len = mid_total / n_stations
+
+        mm_per_svg = _to_mm(scale, doc_units)
+        svg_body_seg = body_seg_len / mm_per_svg
+        svg_handle_seg = handle_seg_len / mm_per_svg
+
+        mug_body_paths = get_layer_paths(svg, "mug body",
+                                         max_seg_len=svg_body_seg)
+        profile_paths = get_layer_paths(svg, "handle profile",
+                                        max_seg_len=svg_handle_seg)
+        mug_outer_mm = svg_to_mm(mug_body_paths[0])
+        mug_inner_mm = svg_to_mm(mug_body_paths[1])
+        handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
+
         # Sample rails
         stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
 

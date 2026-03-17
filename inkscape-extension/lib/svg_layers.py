@@ -58,8 +58,19 @@ def find_layer(svg_root, label: str):
     return None
 
 
-def _de_casteljau(p0, p1, p2, p3, n_segments=16):
-    """Subdivide a cubic Bezier curve into line segments."""
+def _de_casteljau(p0, p1, p2, p3, n_segments=16, max_seg_len=None):
+    """Subdivide a cubic Bezier curve into line segments.
+
+    If *max_seg_len* is given, the number of segments is computed from
+    the estimated arc length so that each chord is ≈ max_seg_len.
+    """
+    if max_seg_len is not None and max_seg_len > 0:
+        # Control-polygon length is an upper bound on the arc length
+        poly_len = (math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+                    + math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+                    + math.hypot(p3[0] - p2[0], p3[1] - p2[1]))
+        n_segments = max(1, round(poly_len / max_seg_len))
+
     points = []
     for i in range(n_segments + 1):
         t = i / n_segments
@@ -70,10 +81,13 @@ def _de_casteljau(p0, p1, p2, p3, n_segments=16):
     return points
 
 
-def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, cy_end, n_segments=16):
+def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, cy_end,
+                    n_segments=16, max_seg_len=None):
     """Convert an SVG arc to line segments.
 
     Uses the endpoint-to-center parameterization conversion.
+    If *max_seg_len* is given, the segment count is derived from the
+    arc length.
     """
     if abs(rx) < 1e-12 or abs(ry) < 1e-12:
         return [(cx_end, cy_end)]
@@ -128,6 +142,10 @@ def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, 
     elif not sweep and dtheta > 0:
         dtheta -= 2 * math.pi
 
+    if max_seg_len is not None and max_seg_len > 0:
+        arc_len = abs(dtheta) * (rx + ry) / 2
+        n_segments = max(1, round(arc_len / max_seg_len))
+
     points = []
     for i in range(1, n_segments + 1):
         t = i / n_segments
@@ -141,11 +159,15 @@ def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, 
     return points
 
 
-def _parse_path_d(d: str) -> list[tuple[float, float]]:
+def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float, float]]:
     """Parse an SVG path 'd' attribute into a polyline.
 
     Handles M, L, C, A, Z commands (absolute and relative).
     Cubic beziers are subdivided via De Casteljau.
+
+    If *max_seg_len* is given (in SVG user units), bezier and arc
+    subdivision density is computed from the curve length so that
+    each chord is ≈ max_seg_len.  Line segments are unaffected.
     """
     if not d:
         return []
@@ -218,7 +240,7 @@ def _parse_path_d(d: str) -> list[tuple[float, float]]:
                     x1 += current[0]; y1 += current[1]
                     x2 += current[0]; y2 += current[1]
                     x += current[0]; y += current[1]
-                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y))
+                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), max_seg_len=max_seg_len)
                 points.extend(bez[1:])  # skip first (= current)
                 current = (x, y)
 
@@ -232,7 +254,7 @@ def _parse_path_d(d: str) -> list[tuple[float, float]]:
                 # Reflect previous control point
                 x1 = 2 * current[0] - x2
                 y1 = 2 * current[1] - y2
-                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y))
+                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), max_seg_len=max_seg_len)
                 points.extend(bez[1:])
                 current = (x, y)
 
@@ -246,7 +268,7 @@ def _parse_path_d(d: str) -> list[tuple[float, float]]:
                 # Convert quadratic to cubic
                 cp1 = (current[0] + 2/3 * (x1 - current[0]), current[1] + 2/3 * (y1 - current[1]))
                 cp2 = (x + 2/3 * (x1 - x), y + 2/3 * (y1 - y))
-                bez = _de_casteljau(current, cp1, cp2, (x, y))
+                bez = _de_casteljau(current, cp1, cp2, (x, y), max_seg_len=max_seg_len)
                 points.extend(bez[1:])
                 current = (x, y)
 
@@ -271,7 +293,8 @@ def _parse_path_d(d: str) -> list[tuple[float, float]]:
                     x += current[0]; y += current[1]
                 arc_pts = _arc_to_points(
                     current[0], current[1], rx_val, ry_val,
-                    x_rot, large_arc, sweep, x, y
+                    x_rot, large_arc, sweep, x, y,
+                    max_seg_len=max_seg_len,
                 )
                 points.extend(arc_pts)
                 current = (x, y)
@@ -394,12 +417,15 @@ def _get_composed_transform(elem, root) -> list[list[float]]:
     return result
 
 
-def get_layer_paths(svg_root, label: str) -> list[list[tuple[float, float]]]:
+def get_layer_paths(svg_root, label: str, max_seg_len: float | None = None) -> list[list[tuple[float, float]]]:
     """Extract all paths from a named layer as polylines.
 
     Args:
         svg_root: SVG root element.
         label: Layer label to search for.
+        max_seg_len: If given (in SVG user units), bezier and arc curves
+            are subdivided so each chord ≈ this length.  Line segments
+            are unaffected.  Defaults to 16 fixed segments per curve.
 
     Returns:
         List of polylines, each a list of (x, y) tuples in document coordinates.
@@ -424,7 +450,7 @@ def get_layer_paths(svg_root, label: str) -> list[list[tuple[float, float]]]:
             if not d:
                 continue
 
-            raw_points = _parse_path_d(d)
+            raw_points = _parse_path_d(d, max_seg_len=max_seg_len)
             if not raw_points:
                 continue
 

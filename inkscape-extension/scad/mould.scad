@@ -133,22 +133,57 @@ function mug_r_at_z(z) =
 
 _foot_z = is_undef(foot_concavity_z) ? 0 : foot_concavity_z;
 
+// Handle rail projections onto the XZ plane (2D mould coordinates:
+// X = 3D X, Y = 3D Z).  Inner = closest to mug (min X per station),
+// outer = farthest from mug (max X per station).
+_handle_inner_2d = [for (s = handle_stations)
+    let(xs = [for (p = s) p[0]],
+        mn = min(xs),
+        pts = [for (p = s) if (abs(p[0] - mn) < 0.01) p])
+    [pts[0][0], pts[0][2]]
+];
+
+_handle_outer_2d = [for (s = handle_stations)
+    let(xs = [for (p = s) p[0]],
+        mx = max(xs),
+        pts = [for (p = s) if (abs(p[0] - mx) < 0.01) p])
+    [pts[0][0], pts[0][2]]
+];
+
+// Closed handle outline: outer rail forward, inner rail reversed
+_handle_outline_2d = concat(
+    _handle_outer_2d,
+    [for (i = [len(_handle_inner_2d)-1:-1:0]) _handle_inner_2d[i]]
+);
+
 // =====================================================================
 // 2D MOULD PRIMITIVES (in XY plane where X = 3D X, Y = 3D Z height)
 // =====================================================================
 
-// Convex hull of mug + handle silhouette, expanded by plaster_thickness,
-// then clipped at inner_top_z so the mould stops where the filler tube
-// (defined in the SVG inner profile) begins.
+// Mould interior boundary: full plaster around the mug body, half
+// plaster around the handle, gap between mug and handle filled solid.
+// Clipped at inner_top_z (filler tube height from the SVG inner profile).
 module mould_hull_2d() {
     difference() {
-        offset(r = plaster_thickness)
-        hull() {
+        union() {
+            // 1. Mug body (outer + inner profiles) with full plaster
+            offset(r = plaster_thickness) {
+                polygon(points = mug_outer_profile);
+                mirror([1, 0]) polygon(points = mug_outer_profile);
+                polygon(points = mug_inner_profile);
+                mirror([1, 0]) polygon(points = mug_inner_profile);
+            }
+
+            // 2. Handle outline with half plaster
+            offset(r = plaster_thickness / 2)
+                polygon(points = _handle_outline_2d);
+
+            // 3. Fill gap between mug and handle (no offset)
             polygon(points = mug_outer_profile);
             mirror([1, 0]) polygon(points = mug_outer_profile);
-            for (s = handle_stations)
-                for (p = s)
-                    translate([p[0], p[2]]) circle(r = 0.01, $fn = 4);
+            polygon(points = mug_inner_profile);
+            mirror([1, 0]) polygon(points = mug_inner_profile);
+            polygon(points = _handle_outer_2d);
         }
         // Clip everything above inner_top_z
         translate([-1000, inner_top_z])

@@ -43,6 +43,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--fa", type=float, default=12.0)
         pars.add_argument("--fs", type=float, default=2.0)
         pars.add_argument("--preview", type=inkex.Boolean, default=True)
+        pars.add_argument("--plaster_thickness", type=float, default=30.0)
+        pars.add_argument("--wall_thickness", type=float, default=0.8)
+        pars.add_argument("--natch_radius", type=float, default=6.75)
+        pars.add_argument("--clay_shrinkage", type=float, default=10.0)
 
     def effect(self):
         svg = self.svg
@@ -50,6 +54,16 @@ class MugGeneratorEffect(inkex.EffectExtension):
         output_dir = self.options.output_dir
         if not output_dir:
             inkex.errormsg("Please specify an output directory.")
+            return
+
+        # Validate mould parameters
+        plaster = self.options.plaster_thickness
+        natch_r = self.options.natch_radius
+        if plaster - natch_r * 2 < 10:
+            inkex.errormsg(
+                f"Plaster thickness ({plaster} mm) minus natch hole diameter "
+                f"({natch_r * 2} mm) must be at least 10 mm."
+            )
             return
 
         # Determine units and scale
@@ -170,24 +184,54 @@ class MugGeneratorEffect(inkex.EffectExtension):
             mug_radius_at_z=mug_true_radius_at_z,
         )
 
+        # Clay shrinkage compensation: enlarge the model so the fired
+        # piece matches the drawn size.
+        shrinkage_pct = self.options.clay_shrinkage
+        clay_scale = 100.0 / (100.0 - shrinkage_pct) if shrinkage_pct > 0 else 1.0
+
         # Build mug profiles for OpenSCAD — raw polygon vertices in path
         # order (not z-sorted).  X = radius from the document origin (mug axis).
-        scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
-        scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
+        # All mug geometry is scaled by the clay shrinkage factor.
+        scad_outer_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_outer_mm]
+        scad_inner_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_inner_mm]
+        scaled_handle_stations = [
+            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
+             for pt in poly]
+            for poly in handle_stations_3d
+        ]
+        scaled_handle_path = [
+            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
+             s.centroid[2] * clay_scale]
+            for s in stations
+        ]
+
+        # Detect foot concavity for mould type
+        concavity = mug_surface.detect_foot_concavity()
+        mould_params = {
+            "plaster_thickness": self.options.plaster_thickness,
+            "wall_thickness": self.options.wall_thickness,
+            "natch_radius": self.options.natch_radius,
+        }
+        if concavity:
+            mould_params["mould_type"] = 3
+            mould_params["foot_concavity_z"] = concavity[0] * clay_scale
+            mould_params["foot_concavity_radius"] = concavity[1] * clay_scale
+        else:
+            mould_params["mould_type"] = 2
 
         # Build output data
         data = {
             "mug_outer_profile": scad_outer_profile,
             "mug_inner_profile": scad_inner_profile,
-            "handle_stations": [
-                [list(pt) for pt in poly] for poly in handle_stations_3d
-            ],
-            "handle_path": [list(s.centroid) for s in stations],
+            "handle_stations": scaled_handle_stations,
+            "handle_path": scaled_handle_path,
             "mug_params": {
                 "fn": self.options.fn,
                 "fa": self.options.fa,
                 "fs": self.options.fs,
-                "axis_x": mug_surface.axis_x,
+                "axis_x": mug_surface.axis_x * clay_scale,
+                "clay_shrinkage_pct": shrinkage_pct,
+                **mould_params,
             },
         }
 

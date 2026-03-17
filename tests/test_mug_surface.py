@@ -50,3 +50,40 @@ class TestMugSurface:
         surface = MugSurface([[0, 0], [10, 50], [5, 100]])
         assert surface.radius_at_z(25) == pytest.approx(5.0)
         assert surface.radius_at_z(75) == pytest.approx(7.5)
+
+
+class TestFootConcavity:
+    def test_no_concavity_straight(self):
+        surface = MugSurface([[30, 0], [30, 100]])
+        assert surface.detect_foot_concavity() is None
+
+    def test_no_concavity_widening(self):
+        # Foot gets wider going up — no concavity
+        surface = MugSurface([[25, 0], [30, 10], [35, 100]])
+        assert surface.detect_foot_concavity() is None
+
+    def test_foot_ring_detected(self):
+        # Foot ring: radius 30 at z=0, tucks to 25 at z=3, back to 30 at z=6
+        surface = MugSurface([[30, 0], [25, 3], [30, 6], [35, 100]])
+        result = surface.detect_foot_concavity()
+        assert result is not None
+        z, r = result
+        assert r == pytest.approx(30.0)
+        assert z == pytest.approx(6.0)
+
+    def test_subtle_concavity(self):
+        surface = MugSurface([[30, 0], [29.5, 2], [30, 4], [32, 100]])
+        result = surface.detect_foot_concavity()
+        assert result is not None
+        z, r = result
+        assert z == pytest.approx(4.0)
+
+    def test_interpolated_crossing(self):
+        # Crossing happens between profile points
+        surface = MugSurface([[30, 0], [26, 3], [34, 7], [34, 100]])
+        result = surface.detect_foot_concavity()
+        assert result is not None
+        z, r = result
+        # Linear interp: r goes from 26→34 over z 3→7, crosses 30 at z=5
+        assert z == pytest.approx(5.0)
+        assert r == pytest.approx(30.0)

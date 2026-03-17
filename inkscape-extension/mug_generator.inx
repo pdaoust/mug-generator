@@ -69,6 +69,26 @@ is corrected automatically.
 
       <separator />
       <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>
+
+      <separator />
+      <label appearance="header">Case mould</label>
+
+      <param name="plaster_thickness" type="float" min="20" max="100" precision="1"
+             gui-text="Plaster mould thickness (mm):"
+             gui-description="Thickness of plaster around the mug body">30.0</param>
+      <param name="wall_thickness" type="float" min="0.4" max="5.0" precision="1"
+             gui-text="Case mould wall (mm):"
+             gui-description="Thickness of the printed case mould shell">0.8</param>
+      <param name="natch_radius" type="float" min="3.0" max="20.0" precision="2"
+             gui-text="Natch hole radius (mm):"
+             gui-description="Radius of alignment natch holes between mould parts">6.75</param>
+
+      <separator />
+      <label appearance="header">Clay shrinkage</label>
+
+      <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
+             gui-text="Clay shrinkage (%):"
+             gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>
     </page>
 
   </param>

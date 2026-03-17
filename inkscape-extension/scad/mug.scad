@@ -65,7 +65,11 @@ module handle() {
 
 // --- Assembly ---
 
-union() {
-    mug_body();
-    handle();
+module mug_assembly() {
+    union() {
+        mug_body();
+        handle();
+    }
 }
+
+mug_assembly();

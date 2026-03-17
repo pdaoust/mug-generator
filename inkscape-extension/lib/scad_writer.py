@@ -119,6 +119,21 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     if "axis_x" in params:
         lines.append(f"mug_axis_x = {params['axis_x']:.6f};\n")
 
+    if "clay_shrinkage_pct" in params:
+        lines.append(f"clay_shrinkage_pct = {params['clay_shrinkage_pct']:.1f};\n")
+
+    # Mould parameters
+    for key in ("plaster_thickness", "wall_thickness", "natch_radius"):
+        if key in params:
+            lines.append(f"{key} = {params[key]:.6f};\n")
+
+    if "mould_type" in params:
+        lines.append(f"mould_type = {params['mould_type']};\n")
+
+    for key in ("foot_concavity_z", "foot_concavity_radius"):
+        if key in params:
+            lines.append(f"{key} = {params[key]:.6f};\n")
+
     (output_dir / "mug_params.scad").write_text("".join(lines))
 
 

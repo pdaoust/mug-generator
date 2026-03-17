@@ -26,7 +26,8 @@ def _parse_scad_array(text: str, var_name: str):
     return eval(match.group(1))  # noqa: S307
 
 
-def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
+def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
+                   clay_shrinkage=0.0):
     """Run the full pipeline without inkex (pure stdlib XML parsing)."""
     tree = ET.parse(svg_path)
     svg_root = tree.getroot()
@@ -78,22 +79,47 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2):
         mug_radius_at_z=mug_true_radius_at_z,
     )
 
+    # Clay shrinkage compensation
+    clay_scale = 100.0 / (100.0 - clay_shrinkage) if clay_shrinkage > 0 else 1.0
+
     # Raw polygon vertices in path order — X = radius from document origin
-    scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
-    scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
+    scad_outer_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_outer_mm]
+    scad_inner_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_inner_mm]
+
+    # Detect foot concavity for mould type
+    concavity = mug_surface.detect_foot_concavity()
+    mould_params = {
+        "plaster_thickness": 30.0,
+        "wall_thickness": 0.8,
+        "natch_radius": 6.75,
+    }
+    if concavity:
+        mould_params["mould_type"] = 3
+        mould_params["foot_concavity_z"] = concavity[0] * clay_scale
+        mould_params["foot_concavity_radius"] = concavity[1] * clay_scale
+    else:
+        mould_params["mould_type"] = 2
 
     data = {
         "mug_outer_profile": scad_outer_profile,
         "mug_inner_profile": scad_inner_profile,
         "handle_stations": [
-            [list(pt) for pt in poly] for poly in handle_stations_3d
+            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
+             for pt in poly]
+            for poly in handle_stations_3d
         ],
-        "handle_path": [list(s.centroid) for s in stations],
+        "handle_path": [
+            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
+             s.centroid[2] * clay_scale]
+            for s in stations
+        ],
         "mug_params": {
             "fn": fn,
             "fa": fa,
             "fs": fs,
-            "axis_x": mug_surface.axis_x,
+            "axis_x": mug_surface.axis_x * clay_scale,
+            "clay_shrinkage_pct": clay_shrinkage,
+            **mould_params,
         },
     }
 
@@ -153,6 +179,10 @@ class TestIntegration:
         text = (tmp_path / "mug_params.scad").read_text()
         assert "$fn = 20" in text
         assert "mug_axis_x" in text
+        assert "plaster_thickness" in text
+        assert "wall_thickness" in text
+        assert "natch_radius" in text
+        assert "mould_type" in text
 
     def test_numeric_consistency(self, tmp_path):
         """Run pipeline twice and verify outputs match within tolerance."""
@@ -166,7 +196,27 @@ class TestIntegration:
             for p1, p2 in zip(s1, s2):
                 assert p1 == pytest.approx(p2, abs=1e-6)
 
+    def test_mould_scad_copied(self, tmp_path):
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        assert (tmp_path / "mould.scad").exists()
+
     def test_auto_resolution(self, tmp_path):
         """Test with auto resolution (fn=0) — should still produce valid output."""
         data = _run_pipeline(FIXTURE_SVG, tmp_path, fn=0, fa=12, fs=2)
         assert len(data["handle_stations"]) >= 5
+
+    def test_clay_shrinkage(self, tmp_path):
+        """Test clay shrinkage scales all mug geometry."""
+        data_no = _run_pipeline(FIXTURE_SVG, tmp_path / "no_shrink", fn=20,
+                                clay_shrinkage=0.0)
+        data_10 = _run_pipeline(FIXTURE_SVG, tmp_path / "shrink_10", fn=20,
+                                clay_shrinkage=10.0)
+
+        scale = 100.0 / 90.0
+        for p0, p10 in zip(data_no["mug_outer_profile"],
+                           data_10["mug_outer_profile"]):
+            assert p10[0] == pytest.approx(p0[0] * scale, abs=1e-4)
+            assert p10[1] == pytest.approx(p0[1] * scale, abs=1e-4)
+
+        text = (tmp_path / "shrink_10" / "mug_params.scad").read_text()
+        assert "clay_shrinkage_pct = 10.0" in text

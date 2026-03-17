@@ -81,6 +81,31 @@ class TestScadWriter:
         run_all_emitters(_base_data(handle_path=[[1, 0, 2], [3, 0, 4]]), tmp_path)
         assert (tmp_path / "handle_path.scad").exists()
 
+    def test_mould_params_2part(self, tmp_path):
+        run_all_emitters(_base_data(mug_params={
+            "fn": 0, "fa": 12, "fs": 2, "axis_x": 0.0,
+            "plaster_thickness": 30.0, "wall_thickness": 0.8,
+            "natch_radius": 6.75, "mould_type": 2,
+        }), tmp_path)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "plaster_thickness = 30" in text
+        assert "wall_thickness = 0.8" in text
+        assert "natch_radius = 6.75" in text
+        assert "mould_type = 2" in text
+        assert "foot_concavity_z" not in text
+
+    def test_mould_params_3part(self, tmp_path):
+        run_all_emitters(_base_data(mug_params={
+            "fn": 20, "axis_x": 0.0,
+            "plaster_thickness": 30.0, "wall_thickness": 0.8,
+            "natch_radius": 6.75, "mould_type": 3,
+            "foot_concavity_z": 6.0, "foot_concavity_radius": 30.0,
+        }), tmp_path)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "mould_type = 3" in text
+        assert "foot_concavity_z = 6" in text
+        assert "foot_concavity_radius = 30" in text
+
     def test_numeric_tolerance(self, tmp_path):
         outer = [[12.3456789, 98.7654321], [0.001, 0.002]]
         run_all_emitters(_base_data(mug_outer_profile=outer), tmp_path)

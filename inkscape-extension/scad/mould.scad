@@ -453,33 +453,58 @@ module case_base() {
 }
 
 // =====================================================================
-// RENDER
+// RENDER — print-ready orientation
 // =====================================================================
+//
+// Each part is rotated so its open face points up (+Z) and its
+// floor sits on the build plate (Z = 0).  Parts are spaced along Y.
 
 _hull_z_min = mug_min_z - plaster_thickness;
+_hull_z_max = inner_top_z + wall_thickness;
+_layout_gap = 10;
+
+// After rotating a half, the mug-height axis lies along Y.
+// Half A  (rotate [90,0,0]):  Y ∈ [-_hull_z_max, -_foot_z]
+// Half B  (rotate [-90,0,0]): Y ∈ [_foot_z, _hull_z_max]
+// Shift each outward by _hull_z_max + gap/2 so the pair is
+// centred on Y = 0 with _layout_gap between them.
 
 module render_2part() {
     if (render_part == "all") {
-        translate([0,  explode_gap, 0]) case_half_a();
-        translate([0, -explode_gap, 0]) case_half_b();
+        translate([0, _hull_z_max + _layout_gap / 2, 0])
+            rotate([90, 0, 0]) case_half_a();
+        translate([0, -(_hull_z_max + _layout_gap / 2), 0])
+            rotate([-90, 0, 0]) case_half_b();
     } else if (render_part == "half_a") {
-        case_half_a();
+        rotate([90, 0, 0]) case_half_a();
     } else if (render_part == "half_b") {
-        case_half_b();
+        rotate([-90, 0, 0]) case_half_b();
     }
 }
 
 module render_3part() {
+    _half_y_extent = _hull_z_max - _foot_z;
+
     if (render_part == "all") {
-        translate([0,  explode_gap, 0]) case_3part_half_a();
-        translate([0, -explode_gap, 0]) case_3part_half_b();
-        translate([0, 0, -(explode_gap + abs(_hull_z_min))]) case_base();
+        // Upper halves — beside each other along Y
+        translate([0, _hull_z_max + _layout_gap / 2, 0])
+            rotate([90, 0, 0]) case_3part_half_a();
+        translate([0, -(_hull_z_max + _layout_gap / 2), 0])
+            rotate([-90, 0, 0]) case_3part_half_b();
+
+        // Base — flipped, placed after Half A along +Y
+        translate([0,
+                   _layout_gap / 2 + _half_y_extent
+                       + _layout_gap + _base_half_xy + wall_thickness,
+                   _foot_z])
+            rotate([180, 0, 0]) case_base();
+
     } else if (render_part == "half_a") {
-        case_3part_half_a();
+        rotate([90, 0, 0]) case_3part_half_a();
     } else if (render_part == "half_b") {
-        case_3part_half_b();
+        rotate([-90, 0, 0]) case_3part_half_b();
     } else if (render_part == "base") {
-        case_base();
+        translate([0, 0, _foot_z]) rotate([180, 0, 0]) case_base();
     }
 }
 

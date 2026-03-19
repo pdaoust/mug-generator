@@ -94,7 +94,13 @@ is corrected automatically.
              gui-description="Thickness of the funnel shell walls">1.5</param>
       <param name="flange_width" type="float" min="2" max="20" precision="1"
              gui-text="Funnel flange width (mm):"
-             gui-description="Flange overhang beyond pouring hole">5.0</param>
+             gui-description="Flange overhang beyond pouring hole">3.0</param>
+      <param name="breather_hole_dia" type="float" min="0.5" max="5.0" precision="1"
+             gui-text="Breather hole diameter (mm):"
+             gui-description="Diameter of holes in lip form for slip flow">1.0</param>
+      <param name="breather_hole_count" type="int" min="2" max="24"
+             gui-text="Breather hole count:"
+             gui-description="Number of holes around the lip form">6</param>
 
       <separator />
       <label appearance="header">Clay shrinkage</label>

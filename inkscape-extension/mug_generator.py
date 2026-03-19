@@ -48,7 +48,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--natch_radius", type=float, default=6.75)
         pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
         pars.add_argument("--funnel_wall", type=float, default=1.5)
-        pars.add_argument("--flange_width", type=float, default=5.0)
+        pars.add_argument("--flange_width", type=float, default=3.0)
+        pars.add_argument("--breather_hole_dia", type=float, default=1.0)
+        pars.add_argument("--breather_hole_count", type=int, default=6)
         pars.add_argument("--clay_shrinkage", type=float, default=10.0)
 
     def effect(self):
@@ -244,6 +246,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "funnel_wall_angle": self.options.funnel_wall_angle,
             "funnel_wall": self.options.funnel_wall,
             "flange_width": self.options.flange_width,
+            "breather_hole_dia": self.options.breather_hole_dia,
+            "breather_hole_count": self.options.breather_hole_count,
         }
         if concavity:
             mould_params["mould_type"] = 3

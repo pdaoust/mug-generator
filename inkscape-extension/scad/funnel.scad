@@ -122,16 +122,22 @@ module funnel_cone() {
         }
 }
 
-// 2. Flange (depth stop) — rests on the mould top surface
+// 2. Flange (depth stop) — rests on the mould top surface.
+//    Top has a 45° taper from the cone junction outward so the overhang
+//    can print without support when the funnel is upside down.
+//    Built with rotate_extrude of a trapezoidal cross-section.
+//    The 45° slope drops funnel_wall mm over funnel_wall mm of radius.
+flange_outer_r = pour_hole_r + flange_width;
+
 module funnel_flange() {
-    translate([0, 0, flange_z])
-        difference() {
-            cylinder(h = funnel_wall,
-                     r = pour_hole_r + flange_width);
-            translate([0, 0, -0.01])
-                cylinder(h = funnel_wall + 0.02,
-                         r = pour_hole_r - funnel_wall);
-        }
+    rotate_extrude()
+        polygon(points = [
+            [pour_hole_r - funnel_wall, flange_z],              // inner bottom
+            [flange_outer_r,            flange_z],              // outer bottom
+            [pour_hole_r + funnel_wall, flange_z],              // where 45° meets bottom
+            [pour_hole_r,               cone_base_z],           // top at cone junction
+            [pour_hole_r - funnel_wall, cone_base_z],           // inner top
+        ]);
 }
 
 // 3. Cylindrical neck (inside pouring hole)
@@ -146,15 +152,33 @@ module funnel_neck() {
         }
 }
 
-// 4. Lip form (shapes the mug's rim)
+// 4. Lip form (shapes the mug's rim) — hollow shell, open at the bottom,
+//    with breather holes for slip flow.
+breather_r = breather_hole_dia / 2;
+breather_z = lip_top_z - breather_r;
+
 module funnel_lip_form() {
-    intersection() {
-        mug_inner_solid();
-        // Clip to pouring hole radius
-        cylinder(h = 2000, r = neck_r, center = true);
-        // Clip to lip Z range
-        translate([0, 0, (lip_top_z + lip_bottom_z) / 2])
-            cube([2000, 2000, lip_top_z - lip_bottom_z], center = true);
+    difference() {
+        intersection() {
+            mug_inner_solid();
+            // Clip to pouring hole radius
+            cylinder(h = 2000, r = neck_r, center = true);
+            // Clip to lip Z range
+            translate([0, 0, (lip_top_z + lip_bottom_z) / 2])
+                cube([2000, 2000, lip_top_z - lip_bottom_z], center = true);
+        }
+        // Hollow out: a simple cylinder removes the core, leaving a
+        // funnel_wall-thick shell.  Starts below lip_bottom_z so the
+        // bottom face is open.
+        cylinder(h = 2000, r = neck_r - funnel_wall, center = true);
+        // Breather holes: radial cylinders pointing inward so slip can
+        // flow up between the lip form and the plaster mould.
+        for (i = [0:breather_hole_count - 1])
+            rotate([0, 0, i * 360 / breather_hole_count])
+                translate([neck_r, 0, breather_z])
+                    rotate([0, -90, 0])
+                        cylinder(h = funnel_wall + 0.02,
+                                 r = breather_r);
     }
 }
 
@@ -171,4 +195,7 @@ module pouring_funnel() {
     }
 }
 
-pouring_funnel();
+// Flip upside down for printing, with cone top at Z=0.
+translate([0, 0, cone_base_z + cone_height])
+    rotate([180, 0, 0])
+        pouring_funnel();

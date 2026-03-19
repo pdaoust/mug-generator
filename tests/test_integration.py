@@ -118,7 +118,9 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "natch_radius": 6.75,
         "funnel_wall_angle": 30.0,
         "funnel_wall": 1.5,
-        "flange_width": 5.0,
+        "flange_width": 3.0,
+        "breather_hole_dia": 1.0,
+        "breather_hole_count": 6,
     }
     if concavity:
         mould_params["mould_type"] = 3
@@ -214,6 +216,8 @@ class TestIntegration:
         assert "funnel_wall_angle" in text
         assert "funnel_wall" in text
         assert "flange_width" in text
+        assert "breather_hole_dia" in text
+        assert "breather_hole_count" in text
 
     def test_numeric_consistency(self, tmp_path):
         """Run pipeline twice and verify outputs match within tolerance."""

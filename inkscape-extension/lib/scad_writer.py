@@ -128,9 +128,13 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
             lines.append(f"{key} = {params[key]:.6f};\n")
 
     # Funnel parameters
-    for key in ("funnel_wall_angle", "funnel_wall", "flange_width"):
+    for key in ("funnel_wall_angle", "funnel_wall", "flange_width",
+                 "breather_hole_dia"):
         if key in params:
             lines.append(f"{key} = {params[key]:.6f};\n")
+
+    if "breather_hole_count" in params:
+        lines.append(f"breather_hole_count = {params['breather_hole_count']};\n")
 
     if "mould_type" in params:
         lines.append(f"mould_type = {params['mould_type']};\n")

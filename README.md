@@ -18,7 +18,7 @@ I owe a huge amount of gratitude to the hard work of Tony Hansen -- [this 3D-pri
 
 ## Designing your mug
 
-Note: The `example.svg` file in the root of this repo shows you all the parts. Refer to that file while you're reading the steps below.
+Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/example.svg) file in the root of this repo shows you all the parts. Refer to that file while you're reading the steps below.
 
 1. Create five layers with the following names:
     * `mug body`: this'll hold the shape of the mug.

@@ -57,7 +57,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     handle_enabled = True
     try:
         handle_rail_paths = get_layer_paths(svg_root, "handle rails")
-        side_rail_paths = get_layer_paths(svg_root, "side rails")
+        side_rail_paths = get_layer_paths(svg_root, "handle side rails")
         profile_paths = get_layer_paths(svg_root, "handle profile")
     except ValueError:
         handle_enabled = False

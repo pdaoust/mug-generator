@@ -143,7 +143,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "min": 2, "max": 2,
                 "desc": "inner rail (near mug) and outer rail (far from mug)",
             },
-            "side rails": {
+            "handle side rails": {
                 "min": 1, "max": 1,
                 "desc": "one side rail path (X = half-width, Y = position along handle)",
             },
@@ -198,7 +198,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         stations = []
         if handle_enabled:
             handle_rail_paths = layers["handle rails"]
-            side_rail_paths = layers["side rails"]
+            side_rail_paths = layers["handle side rails"]
             profile_paths = layers["handle profile"]
 
             inner_rail_mm = svg_to_mm(handle_rail_paths[0])
@@ -393,7 +393,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
             mug_outer_svg = [(p[0] * scale, p[1] * scale) for p in mug_body_paths[0]]
             side_rail_svg = None
             if handle_enabled:
-                side_rail_paths = layers["side rails"]
+                side_rail_paths = layers["handle side rails"]
                 side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
             draw_preview(svg, mug_outer_svg, stations, handle_stations_3d,
                          side_rail_svg, vb_bottom,

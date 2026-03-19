@@ -26,7 +26,7 @@
 
   <!-- Side rails: X=half-width in mm, Y=arc-length fraction [0,1] scaled to viewbox -->
   <!-- Width tapers from 3mm at ends to 6mm in middle -->
-  <g inkscape:groupmode="layer" inkscape:label="side rails">
+  <g inkscape:groupmode="layer" inkscape:label="handle side rails">
     <!-- Left rail -->
     <path d="M 3,0 L 6,100 L 3,200" />
     <!-- Right rail -->

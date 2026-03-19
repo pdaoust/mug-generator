@@ -30,7 +30,7 @@ The handle loft follows these rails from start to end.
       </label>
       <separator />
 
-      <label appearance="header">side rails</label>
+      <label appearance="header">handle side rails</label>
       <label>
 One path: side rail (symmetric — used for both sides).
 Controls handle width (how far it protrudes from the drawing
@@ -67,7 +67,7 @@ are supported.
       <separator />
       <label appearance="header">OpenSCAD resolution</label>
 
-      <param name="fn" type="int" min="0" max="360" gui-text="$fn (0=auto):"
+      <param name="fn" type="int" min="0" max="360" gui-text="$fn number of facets (0=auto):"
              gui-description="Fixed number of segments (overrides $fa/$fs when > 0)">0</param>
       <param name="fa" type="float" min="0.1" max="180" precision="1"
              gui-text="$fa (min angle):"

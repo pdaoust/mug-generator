@@ -426,32 +426,30 @@ module case_upper_half(pos_y) {
     }
 }
 
-// --- Base part (simple rectangular box) ---
-// No draft angle — straight walls for easy mould release.
-// Floor at _foot_z (top), open at bottom (pour opening).
+// --- Base part ---
+// Derived from the same mould_outer_hull_2d as the top parts so
+// the footprint aligns exactly at the Z = _foot_z seam.
+// Open at -Z (pour opening), closed at +Z (_foot_z ceiling).
 
-_base_half_xy = mug_max_radius + plaster_thickness;
 _base_z_bot = mug_min_z - plaster_thickness;
 
 module case_base_box() {
     difference() {
-        // Outer box
-        translate([-_base_half_xy - wall_thickness,
-                   -_base_half_xy - wall_thickness,
-                   _base_z_bot])
-            cube([2 * (_base_half_xy + wall_thickness),
-                  2 * (_base_half_xy + wall_thickness),
-                  _foot_z - _base_z_bot]);
-
-        // Inner cavity: inset by wall_thickness on sides, wall_thickness
-        // below _foot_z for the ceiling/floor.  Extends below outer box
-        // at -Z to create the pour opening.
-        translate([-_base_half_xy,
-                   -_base_half_xy,
-                   _base_z_bot - 0.1])
-            cube([2 * _base_half_xy,
-                  2 * _base_half_xy,
-                  _foot_z - wall_thickness - _base_z_bot + 0.1]);
+        // Outer shell — same profile as upper halves
+        intersection() {
+            full_outer_hull();
+            clip_z_below(_foot_z);
+            clip_z_above(_base_z_bot);
+        }
+        // Inner cavity: inset by wall_thickness via mould_hull.
+        // Extends below outer box at -Z to create the pour opening.
+        intersection() {
+            rotate([90, 0, 0])
+                linear_extrude(height = _full_y, center = true)
+                    mould_hull_2d();
+            clip_z_below(_foot_z - wall_thickness);
+            clip_z_above(_base_z_bot - 0.1);
+        }
     }
 }
 
@@ -473,8 +471,7 @@ module case_base_part() {
 // Y offset = max(mug_r + clearance, midpoint between mug edge and form edge).
 
 _base_natch_max_r = mug_r_at_z(_foot_z);
-_form_inner_edge_y = min(_base_half_xy, mould_y_half);
-_base_natch_alt_y = (_base_natch_max_r + _form_inner_edge_y) / 2;
+_base_natch_alt_y = (_base_natch_max_r + mould_y_half) / 2;
 base_natch_y = max(_base_natch_max_r + 5 + natch_radius, _base_natch_alt_y);
 
 module base_natch(y_pos) {
@@ -556,7 +553,7 @@ module render_3part() {
         // Base — flipped, placed after Half A along +Y
         translate([0,
                    _layout_gap / 2 + _half_y_extent
-                       + _layout_gap + _base_half_xy + wall_thickness,
+                       + _layout_gap + mould_y_half + wall_thickness,
                    _foot_z])
             rotate([180, 0, 0]) case_base();
 

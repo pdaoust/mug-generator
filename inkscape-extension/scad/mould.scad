@@ -426,30 +426,35 @@ module case_upper_half(pos_y) {
     }
 }
 
-// --- Base part ---
-// Derived from the same mould_outer_hull_2d as the top parts so
-// the footprint aligns exactly at the Z = _foot_z seam.
-// Open at -Z (pour opening), closed at +Z (_foot_z ceiling).
+// --- Base part (rectangular box) ---
+// Straight walls for easy mould release (no draft angle).
+// Floor at _foot_z (top), open at bottom (pour opening).
+// X and Y half-extents match the top parts' bounding box so the
+// base sits flush under the upper halves at the Z seam.
 
+_base_x_half = mug_max_radius + plaster_thickness;
+_base_y_half = mould_y_half;
 _base_z_bot = mug_min_z - plaster_thickness;
 
 module case_base_box() {
     difference() {
-        // Outer shell — same profile as upper halves
-        intersection() {
-            full_outer_hull();
-            clip_z_below(_foot_z);
-            clip_z_above(_base_z_bot);
-        }
-        // Inner cavity: inset by wall_thickness via mould_hull.
-        // Extends below outer box at -Z to create the pour opening.
-        intersection() {
-            rotate([90, 0, 0])
-                linear_extrude(height = _full_y, center = true)
-                    mould_hull_2d();
-            clip_z_below(_foot_z - wall_thickness);
-            clip_z_above(_base_z_bot - 0.1);
-        }
+        // Outer box
+        translate([-_base_x_half - wall_thickness,
+                   -_base_y_half - wall_thickness,
+                   _base_z_bot])
+            cube([2 * (_base_x_half + wall_thickness),
+                  2 * (_base_y_half + wall_thickness),
+                  _foot_z - _base_z_bot]);
+
+        // Inner cavity: inset by wall_thickness on sides, wall_thickness
+        // below _foot_z for the ceiling/floor.  Extends below outer box
+        // at -Z to create the pour opening.
+        translate([-_base_x_half,
+                   -_base_y_half,
+                   _base_z_bot - 0.1])
+            cube([2 * _base_x_half,
+                  2 * _base_y_half,
+                  _foot_z - wall_thickness - _base_z_bot + 0.1]);
     }
 }
 
@@ -471,7 +476,7 @@ module case_base_part() {
 // Y offset = max(mug_r + clearance, midpoint between mug edge and form edge).
 
 _base_natch_max_r = mug_r_at_z(_foot_z);
-_base_natch_alt_y = (_base_natch_max_r + mould_y_half) / 2;
+_base_natch_alt_y = (_base_natch_max_r + _base_y_half) / 2;
 base_natch_y = max(_base_natch_max_r + 5 + natch_radius, _base_natch_alt_y);
 
 module base_natch(y_pos) {

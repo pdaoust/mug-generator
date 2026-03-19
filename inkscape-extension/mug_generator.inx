@@ -18,25 +18,25 @@ Two paths: outer profile and inner profile.
 Each is a half-profile polyline in the XZ plane (SVG X = radius,
 SVG Y = height). The mug axis of symmetry is at the document
 X origin (x=0). The inner profile defines the hollow interior,
-lip shape, and floor thickness.
+lip shape, floor thickness, and filling tube height and diameter.
       </label>
       <separator />
 
       <label appearance="header">handle rails</label>
       <label>
-Two paths: inner rail (closer to mug) and outer rail (farther).
+Two paths: inner rail (smaller) and outer rail (larger).
 Both are polylines in the same XZ plane as the mug body.
-The handle loft follows these rails from start to end.
+The handle extrusion follows these rails from start to end.
+Make sure the endpoints touch the mug's outer body.
       </label>
       <separator />
 
       <label appearance="header">handle side rails</label>
       <label>
-One path: side rail (symmetric — used for both sides).
-Controls handle width (how far it protrudes from the drawing
-plane). X = half-width from the document X origin. Y = position
+One path: side rail (symmetric — used for both sides). Controls handle width and shape.
+X = half-width from the document X origin. Y = position
 along the handle, at any convenient scale — the Y range is
-mapped to 0 (start of handle) through 1 (end of handle)
+mapped to 0 (bottom of handle) through 1 (top of handle)
 automatically.
       </label>
       <separator />
@@ -44,16 +44,15 @@ automatically.
       <label appearance="header">handle profile</label>
       <label>
 One closed path: the cross-section shape of the handle.
-Drawn at any convenient size — it will be normalised and
-scaled per-station by the rail geometry. Winding direction
-is corrected automatically.
+Drawn at any convenient size — it will be stretched and
+shrunken to fit the shape inside the four rails.
       </label>
 
       <separator />
       <label appearance="header">mark (optional)</label>
       <label>
 One or more paths forming the maker's mark. Drawn at actual
-size — position in the SVG is arbitrary, the mark will be
+size — put it anywhere you like in the SVG, and the mark will be
 centred on the mug base. Compound paths (letters with holes)
 are supported.
       </label>
@@ -61,20 +60,20 @@ are supported.
 
     <page name="settings" gui-text="Settings">
       <param name="output_dir" type="path" mode="folder"
-             gui-text="Output directory:"
+             gui-text="Output folder"
              gui-description="Directory for generated OpenSCAD files" />
 
       <separator />
-      <label appearance="header">OpenSCAD resolution</label>
+      <label appearance="header">Quality</label>
 
-      <param name="fn" type="int" min="0" max="360" gui-text="$fn number of facets (0=auto):"
-             gui-description="Fixed number of segments (overrides $fa/$fs when > 0)">0</param>
+      <param name="fn" type="int" min="0" max="360" gui-text="Number of facets (0=auto)"
+             gui-description="Fixed number of segments for body and handle (same as OpenSCAD's $fn variable, overrides min angle and min size when > 0). Larger values take more time to render. Use 50 for prototyping and 200 for production.">0</param>
       <param name="fa" type="float" min="0.1" max="180" precision="1"
-             gui-text="$fa (min angle):"
-             gui-description="Minimum angle per segment in degrees">12.0</param>
+             gui-text="Min angle"
+             gui-description="Minimum angle per segment in degrees (same as OpenSCAD's $fa variable)">12.0</param>
       <param name="fs" type="float" min="0.01" max="100" precision="2"
-             gui-text="$fs (min size mm):"
-             gui-description="Minimum segment length in mm">2.0</param>
+             gui-text="Min size (mm)"
+             gui-description="Minimum segment length in mm (same as OpenSCAD's $fs variable)">2.0</param>
 
       <separator />
       <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>
@@ -83,49 +82,49 @@ are supported.
       <label appearance="header">Case mould</label>
 
       <param name="plaster_thickness" type="float" min="20" max="100" precision="1"
-             gui-text="Plaster mould thickness (mm):"
-             gui-description="Thickness of plaster around the mug body">30.0</param>
+             gui-text="Plaster mould thickness (mm)"
+             gui-description="Thickness of plaster around the mug body. 25 to 35 mm recommended.">30.0</param>
       <param name="wall_thickness" type="float" min="0.4" max="5.0" precision="1"
-             gui-text="Case mould wall (mm):"
-             gui-description="Thickness of the printed case mould shell">0.8</param>
+             gui-text="Case mould wall (mm)"
+             gui-description="Thickness of the printed case mould shell. Make this a multiple of your nozzle width — 0.8mm is a good value.">0.8</param>
       <param name="natch_radius" type="float" min="3.0" max="20.0" precision="2"
-             gui-text="Natch hole radius (mm):"
-             gui-description="Radius of alignment natch holes between mould parts">6.75</param>
+             gui-text="Natch hole radius (mm)"
+             gui-description="Radius of alignment natch holes between mould parts. Use 6.75 for Tony Hansen's 3D printed natch system.">6.75</param>
 
       <separator />
       <label appearance="header">Pouring funnel</label>
 
       <param name="funnel_wall_angle" type="float" min="10" max="60" precision="1"
-             gui-text="Funnel wall angle (°):"
+             gui-text="Funnel wall angle (°)"
              gui-description="Cone wall angle from vertical">30.0</param>
       <param name="funnel_wall" type="float" min="0.4" max="5.0" precision="1"
-             gui-text="Funnel wall thickness (mm):"
-             gui-description="Thickness of the funnel shell walls">1.5</param>
+             gui-text="Funnel wall thickness (mm)"
+             gui-description="Thickness of the funnel shell walls">1.2</param>
       <param name="flange_width" type="float" min="2" max="20" precision="1"
-             gui-text="Funnel flange width (mm):"
-             gui-description="Flange overhang beyond pouring hole">3.0</param>
+             gui-text="Funnel flange width (mm)"
+             gui-description="Flange overhang beyond pouring hole. This keeps the funnel from falling too far into the mould as the mould wears out over time.">3.0</param>
       <param name="breather_hole_dia" type="float" min="0.5" max="5.0" precision="1"
-             gui-text="Breather hole diameter (mm):"
-             gui-description="Diameter of holes in lip form for slip flow">1.0</param>
+             gui-text="Breather hole diameter (mm)"
+             gui-description="Diameter of holes in lip form. This lets air escape from the lip form as slip fills the mould.">1.0</param>
       <param name="breather_hole_count" type="int" min="2" max="24"
-             gui-text="Breather hole count:"
-             gui-description="Number of holes around the lip form">6</param>
+             gui-text="Breather hole count"
+             gui-description="Number of breather holes around the lip form">6</param>
 
       <separator />
       <label appearance="header">Clay shrinkage</label>
 
       <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
-             gui-text="Clay shrinkage (%):"
+             gui-text="Clay shrinkage (%)"
              gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>
 
       <separator />
       <label appearance="header">Maker's mark</label>
       <param name="mark_depth" type="float" min="0.1" max="5.0" precision="1"
-             gui-text="Mark depth (mm):">1.0</param>
+             gui-text="Mark depth (mm)">1.0</param>
       <param name="mark_inset" type="bool"
-             gui-text="Inset (debossed):">true</param>
+             gui-text="Inset (debossed)">true</param>
       <param name="mark_draft_angle" type="float" min="0" max="60" precision="1"
-             gui-text="Mark draft angle (°):">45.0</param>
+             gui-text="Mark draft angle (°)" gui-description="The angle of the side walls of the embossed or debossed maker's mark.">45.0</param>
     </page>
 
   </param>

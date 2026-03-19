@@ -84,6 +84,19 @@ is corrected automatically.
              gui-description="Radius of alignment natch holes between mould parts">6.75</param>
 
       <separator />
+      <label appearance="header">Pouring funnel</label>
+
+      <param name="funnel_wall_angle" type="float" min="10" max="60" precision="1"
+             gui-text="Funnel wall angle (°):"
+             gui-description="Cone wall angle from vertical">30.0</param>
+      <param name="funnel_wall" type="float" min="0.4" max="5.0" precision="1"
+             gui-text="Funnel wall thickness (mm):"
+             gui-description="Thickness of the funnel shell walls">1.5</param>
+      <param name="flange_width" type="float" min="2" max="20" precision="1"
+             gui-text="Funnel flange width (mm):"
+             gui-description="Flange overhang beyond pouring hole">5.0</param>
+
+      <separator />
       <label appearance="header">Clay shrinkage</label>
 
       <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"

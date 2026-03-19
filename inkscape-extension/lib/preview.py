@@ -19,6 +19,7 @@ PREVIEW_LABEL = "_preview"
 PREVIEW_STYLE = "fill:magenta;fill-opacity:0.3;stroke:magenta;stroke-width:0.5;stroke-opacity:0.6"
 SIDE_RAIL_STYLE = "fill:green;fill-opacity:0.3;stroke:green;stroke-width:0.5;stroke-opacity:0.6"
 INDICATOR_STYLE = "fill:none;stroke:red;stroke-width:1;stroke-opacity:0.8"
+FUNNEL_STYLE = "fill:dodgerblue;fill-opacity:0.3;stroke:dodgerblue;stroke-width:0.5;stroke-opacity:0.6"
 
 
 def _get_etree():
@@ -75,6 +76,7 @@ def draw_preview(
     handle_stations_3d: list[list[tuple[float, float, float]]],
     side_rail_svg: list[tuple[float, float]] | None = None,
     vb_bottom: float = 0.0,
+    funnel_outline_mm: list[tuple[float, float]] | None = None,
 ) -> None:
     """Draw preview geometry into the _preview layer.
 
@@ -85,6 +87,7 @@ def draw_preview(
         handle_stations_3d: 3D handle cross-section polygons.
         side_rail_svg: Side rail as [(x, y), ...] in SVG user units.
         vb_bottom: Bottom Y of the viewBox (used to map 3D Z back to SVG Y).
+        funnel_outline_mm: Right-half funnel silhouette as [(r, z), ...] in mm.
     """
     layer = _find_or_create_preview_layer(svg)
 
@@ -124,3 +127,12 @@ def draw_preview(
                 parts.append(f"L {p[0]:.4f},{p[1]:.4f}")
             d = " ".join(parts)
             _add_path(layer, d, "fill:none;stroke:magenta;stroke-width:0.8;stroke-opacity:0.7")
+
+    # Funnel silhouette: right half mirrored to full silhouette
+    if funnel_outline_mm:
+        right_side = [(r, vb_bottom - z) for r, z in funnel_outline_mm]
+        left_side = [(-p[0], p[1]) for p in right_side]
+        silhouette = right_side + list(reversed(left_side))
+        d = _points_to_path_d(silhouette)
+        if d:
+            _add_path(layer, d, FUNNEL_STYLE)

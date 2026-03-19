@@ -116,6 +116,9 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "plaster_thickness": 30.0,
         "wall_thickness": 0.8,
         "natch_radius": 6.75,
+        "funnel_wall_angle": 30.0,
+        "funnel_wall": 1.5,
+        "flange_width": 5.0,
     }
     if concavity:
         mould_params["mould_type"] = 3
@@ -162,6 +165,7 @@ class TestIntegration:
         assert (tmp_path / "handle_path.scad").exists()
         assert (tmp_path / "mug_params.scad").exists()
         assert (tmp_path / "mug.scad").exists()
+        assert (tmp_path / "funnel.scad").exists()
 
     def test_mug_profiles_valid(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
@@ -207,6 +211,9 @@ class TestIntegration:
         assert "wall_thickness" in text
         assert "natch_radius" in text
         assert "mould_type" in text
+        assert "funnel_wall_angle" in text
+        assert "funnel_wall" in text
+        assert "flange_width" in text
 
     def test_numeric_consistency(self, tmp_path):
         """Run pipeline twice and verify outputs match within tolerance."""

@@ -46,6 +46,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--plaster_thickness", type=float, default=30.0)
         pars.add_argument("--wall_thickness", type=float, default=0.8)
         pars.add_argument("--natch_radius", type=float, default=6.75)
+        pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
+        pars.add_argument("--funnel_wall", type=float, default=1.5)
+        pars.add_argument("--flange_width", type=float, default=5.0)
         pars.add_argument("--clay_shrinkage", type=float, default=10.0)
 
     def effect(self):
@@ -238,6 +241,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "plaster_thickness": self.options.plaster_thickness,
             "wall_thickness": self.options.wall_thickness,
             "natch_radius": self.options.natch_radius,
+            "funnel_wall_angle": self.options.funnel_wall_angle,
+            "funnel_wall": self.options.funnel_wall,
+            "flange_width": self.options.flange_width,
         }
         if concavity:
             mould_params["mould_type"] = 3
@@ -265,12 +271,97 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Write output
         run_all_emitters(data, output_dir)
 
+        # Compute funnel outline for preview (in mm, pre-clay-scaling)
+        funnel_outline_mm = self._funnel_outline(mug_outer_mm, mug_inner_mm)
+
         # Preview
         if self.options.preview:
             mug_outer_svg = [(p[0] * scale, p[1] * scale) for p in mug_body_paths[0]]
             side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
             draw_preview(svg, mug_outer_svg, stations, handle_stations_3d,
-                         side_rail_svg, vb_bottom)
+                         side_rail_svg, vb_bottom,
+                         funnel_outline_mm=funnel_outline_mm)
+
+
+    @staticmethod
+    def _interp_profile_r(profile, z):
+        """Interpolate the maximum radius of a profile at a given Z."""
+        results = []
+        n = len(profile)
+        for i in range(n):
+            j = (i + 1) % n
+            z0, z1 = profile[i][1], profile[j][1]
+            if min(z0, z1) <= z <= max(z0, z1) and abs(z1 - z0) > 1e-9:
+                t = (z - z0) / (z1 - z0)
+                r = profile[i][0] + t * (profile[j][0] - profile[i][0])
+                results.append(r)
+        return max(results) if results else profile[0][0]
+
+    def _funnel_outline(self, outer_mm, inner_mm):
+        """Compute the funnel right-half silhouette as [(r, z), ...] in mm.
+
+        Returns the outer boundary of the funnel cross-section (right half
+        only — the preview function mirrors it).  The lip-form region traces
+        the inner profile boundary (clipped to neck_r) so the mug wall
+        (outer minus inner) is excluded.
+        """
+        import math
+
+        inner_top_z = max(p[1] for p in inner_mm)
+        lip_top_z = max(p[1] for p in outer_mm)
+        pour_hole_r = self._interp_profile_r(inner_mm, inner_top_z)
+
+        fw = self.options.funnel_wall
+        fla_w = self.options.flange_width
+        cone_h = 50
+        clearance = 0.5
+
+        neck_r = pour_hole_r - clearance
+        flange_z = inner_top_z
+        cone_base_z = flange_z + fw
+        cone_top_r = pour_hole_r + cone_h * math.tan(
+            math.radians(self.options.funnel_wall_angle))
+        flange_outer_r = pour_hole_r + fla_w
+
+        # Compute lip_bottom_z: walk the inner profile downward from
+        # lip_top_z.  The rim narrows; at some point the bowl widens.
+        # Stop at the last narrowing node (just before the first widening).
+        pts_desc = sorted(
+            [(r, z) for r, z in inner_mm if z < lip_top_z - 0.01],
+            key=lambda p: -p[1],
+        )
+        lip_bottom_z = lip_top_z - 3  # fallback
+        for i in range(len(pts_desc) - 1):
+            if pts_desc[i + 1][0] > pts_desc[i][0] + 0.01:  # widening
+                lip_bottom_z = max(lip_top_z - 3, pts_desc[i][1])
+                break
+
+        # Trace the inner profile boundary in the lip region, clipped to
+        # neck_r.  This excludes the mug wall (outer minus inner) from the
+        # funnel preview.
+        n_lip = 20
+        dz = (lip_top_z - lip_bottom_z) / n_lip if n_lip > 0 else 0
+        lip_right = []
+        for i in range(n_lip + 1):
+            z = lip_bottom_z + i * dz
+            r = min(self._interp_profile_r(inner_mm, z), neck_r)
+            lip_right.append((r, z))
+
+        # Right-half outer boundary, bottom to top
+        outline = [(0, lip_bottom_z)]
+        outline.extend(lip_right)
+        # If inner profile at lip_top_z is narrower than the neck, add a
+        # corner at neck_r before continuing upward.
+        if lip_right[-1][0] < neck_r - 0.01:
+            outline.append((neck_r, lip_top_z))
+        outline.extend([
+            (neck_r, flange_z),
+            (flange_outer_r, flange_z),
+            (flange_outer_r, cone_base_z),
+            (pour_hole_r, cone_base_z),
+            (cone_top_r, cone_base_z + cone_h),
+        ])
+        return outline
 
 
 if __name__ == "__main__":

@@ -432,7 +432,12 @@ module case_upper_half(pos_y) {
 // X and Y half-extents match the top parts' bounding box so the
 // base sits flush under the upper halves at the Z seam.
 
-_base_x_half = mug_r_at_z(_foot_z) + plaster_thickness;
+// Max mug radius within plaster_thickness above the seam: the offset()
+// circle around wider profile points above _foot_z extends down to the
+// seam plane, so the hull is wider there than mug_r_at_z(_foot_z) alone.
+_base_x_half = max([for (p = mug_outer_profile)
+    if (p[1] >= mug_min_z && p[1] <= _foot_z + plaster_thickness) p[0]
+]) + plaster_thickness;
 _base_y_half = mould_y_half;
 _base_z_bot = mug_min_z - plaster_thickness;
 

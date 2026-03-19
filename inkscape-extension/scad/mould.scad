@@ -344,14 +344,20 @@ module case_half(pos_y) {
 }
 
 // --- Seam natch holes (on the Y=0 plane) ---
-// #1: handle side — midway between outer handle centroid and mug surface
+// #1: handle side — midway between outer handle centroid and mug surface;
+//     without a handle, midpoint between mug body and mould outer wall
 // #2: opposite side — past the mug body at the plaster midline
 
-mug_r_at_outer_handle = mug_r_at_z(handle_outer_centroid[2]);
-natch_1_x = (handle_outer_centroid[0] + mug_r_at_outer_handle) / 2;
-natch_1_z = handle_outer_centroid[2];
-natch_2_x = -(mug_r_at_outer_handle + plaster_thickness / 2);
-natch_2_z = handle_outer_centroid[2];
+_natch_mid_z = (mug_max_z + mug_min_z) / 2;
+_mug_r_at_natch_z = handle_enabled
+    ? mug_r_at_z(handle_outer_centroid[2])
+    : mug_r_at_z(_natch_mid_z);
+natch_1_x = handle_enabled
+    ? (handle_outer_centroid[0] + _mug_r_at_natch_z) / 2
+    : _mug_r_at_natch_z + plaster_thickness / 2;
+natch_1_z = handle_enabled ? handle_outer_centroid[2] : _natch_mid_z;
+natch_2_x = -(_mug_r_at_natch_z + plaster_thickness / 2);
+natch_2_z = natch_1_z;
 
 module seam_natch(pos) {
     translate(pos)

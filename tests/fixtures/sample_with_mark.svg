@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd"
+     width="200mm" height="200mm" viewBox="0 0 200 200">
+
+  <sodipodi:namedview inkscape:document-units="mm" />
+
+  <!-- Mug body: outer and inner profiles -->
+  <g inkscape:groupmode="layer" inkscape:label="mug body">
+    <path d="M 30,20 L 35,20 L 35,180 L 30,180" />
+    <path d="M 30,23 L 32,23 L 32,180 L 30,180" />
+  </g>
+
+  <!-- Handle rails -->
+  <g inkscape:groupmode="layer" inkscape:label="handle rails">
+    <path d="M 35,50 L 40,80 L 42,100 L 40,120 L 35,150" />
+    <path d="M 55,50 L 60,80 L 62,100 L 60,120 L 55,150" />
+  </g>
+
+  <!-- Side rails -->
+  <g inkscape:groupmode="layer" inkscape:label="side rails">
+    <path d="M 3,0 L 6,100 L 3,200" />
+    <path d="M 3,0 L 6,100 L 3,200" />
+  </g>
+
+  <!-- Handle profile -->
+  <g inkscape:groupmode="layer" inkscape:label="handle profile">
+    <path d="M 0,0 L 10,0 L 10,8 L 0,8 Z" />
+  </g>
+
+  <!-- Maker's mark: simple triangle -->
+  <g inkscape:groupmode="layer" inkscape:label="mark">
+    <path d="M 100,90 L 110,110 L 90,110 Z" />
+  </g>
+
+</svg>

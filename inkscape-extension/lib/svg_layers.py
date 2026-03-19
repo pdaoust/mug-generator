@@ -417,6 +417,110 @@ def _get_composed_transform(elem, root) -> list[list[float]]:
     return result
 
 
+def _split_subpath_d(d: str) -> list[str]:
+    """Split an SVG path 'd' attribute into subpath strings at M/m boundaries.
+
+    Each returned string starts with an absolute M command.  Relative 'm'
+    after a Z/z is converted to absolute using the previous subpath's start
+    point.
+    """
+    tokens = re.findall(
+        r'[MLHVCSQTAZmlhvcsqtaz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', d
+    )
+    if not tokens:
+        return []
+
+    chunks: list[list[str]] = []
+    current_chunk: list[str] = []
+    prev_start: tuple[float, float] | None = None
+    i = 0
+
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in ('M', 'm') and current_chunk:
+            # End previous chunk, record its start point
+            prev_start = _extract_start(current_chunk)
+            chunks.append(current_chunk)
+            current_chunk = []
+            # Convert relative 'm' to absolute 'M' using previous start
+            if tok == 'm' and prev_start is not None:
+                current_chunk.append('M')
+                i += 1
+                # Read the first coordinate pair and make absolute
+                if i + 1 < len(tokens):
+                    x = float(tokens[i]) + prev_start[0]
+                    y = float(tokens[i + 1]) + prev_start[1]
+                    current_chunk.append(str(x))
+                    current_chunk.append(str(y))
+                    i += 2
+                continue
+            else:
+                current_chunk.append(tok)
+                i += 1
+                continue
+        current_chunk.append(tok)
+        i += 1
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return [' '.join(c) for c in chunks]
+
+
+def _extract_start(chunk_tokens: list[str]) -> tuple[float, float]:
+    """Extract the start point (first M/m coordinates) from a token list."""
+    for i, tok in enumerate(chunk_tokens):
+        if tok in ('M', 'm') and i + 2 < len(chunk_tokens):
+            return (float(chunk_tokens[i + 1]), float(chunk_tokens[i + 2]))
+    return (0.0, 0.0)
+
+
+def get_layer_mark_polygons(
+    svg_root, label: str, max_seg_len: float | None = None
+) -> list[list[tuple[float, float]]]:
+    """Extract mark polygons from a named layer, splitting compound paths.
+
+    Each <path> element's 'd' attribute is split at M/m boundaries so that
+    compound shapes (e.g. letters with holes) become separate polygons.
+
+    Args:
+        svg_root: SVG root element.
+        label: Layer label to search for.
+        max_seg_len: Bezier/arc subdivision chord length (SVG user units).
+
+    Returns:
+        List of polygons (each a list of (x, y) tuples).
+        Returns an empty list if the layer doesn't exist (no exception).
+    """
+    layer = find_layer(svg_root, label)
+    if layer is None:
+        return []
+
+    polygons: list[list[tuple[float, float]]] = []
+    ns_path = f"{{{SVG_NS}}}path"
+
+    for elem in layer.iter():
+        tag = elem.tag if isinstance(elem.tag, str) else ""
+        if tag != ns_path and tag != "path":
+            continue
+
+        d = elem.get("d", "")
+        if not d:
+            continue
+
+        transform = _get_composed_transform(elem, svg_root)
+        subpaths = _split_subpath_d(d)
+
+        for sub_d in subpaths:
+            raw_points = _parse_path_d(sub_d, max_seg_len=max_seg_len)
+            if len(raw_points) < 3:
+                continue
+            transformed = _apply_transform_2x3(raw_points, transform)
+            polygons.append(transformed)
+
+    return polygons
+
+
 def get_layer_paths(svg_root, label: str, max_seg_len: float | None = None) -> list[list[tuple[float, float]]]:
     """Extract all paths from a named layer as polylines.
 
@@ -460,3 +564,104 @@ def get_layer_paths(svg_root, label: str, max_seg_len: float | None = None) -> l
             paths.append(transformed)
 
     return paths
+
+
+def offset_polygon(
+    poly: list[tuple[float, float]], delta: float
+) -> list[tuple[float, float]]:
+    """Compute a miter-offset polygon.
+
+    Positive *delta* always expands outward regardless of winding
+    direction (CCW or CW).  Miter spikes at very acute vertices are
+    clamped.
+    """
+    n = len(poly)
+    if n < 3:
+        return list(poly)
+
+    # Signed area → winding direction
+    signed_area = sum(
+        poly[i][0] * poly[(i + 1) % n][1] - poly[(i + 1) % n][0] * poly[i][1]
+        for i in range(n)
+    ) / 2.0
+
+    # Left normals (rotate edge 90° CCW) point inward for CCW,
+    # outward for CW.  Negate for CCW so positive delta always expands.
+    eff = -delta if signed_area > 0 else delta
+
+    result: list[tuple[float, float]] = []
+    for i in range(n):
+        p_prev = poly[(i - 1) % n]
+        p_curr = poly[i]
+        p_next = poly[(i + 1) % n]
+
+        ex = (p_curr[0] - p_prev[0], p_curr[1] - p_prev[1])
+        fx = (p_next[0] - p_curr[0], p_next[1] - p_curr[1])
+        le = math.hypot(*ex)
+        lf = math.hypot(*fx)
+
+        if le < 1e-12 or lf < 1e-12:
+            result.append(p_curr)
+            continue
+
+        ex = (ex[0] / le, ex[1] / le)
+        fx = (fx[0] / lf, fx[1] / lf)
+
+        # Left normals
+        ne = (-ex[1], ex[0])
+        nf = (-fx[1], fx[0])
+
+        bx = ne[0] + nf[0]
+        by = ne[1] + nf[1]
+        bl = math.hypot(bx, by)
+
+        if bl < 1e-12:
+            result.append((p_curr[0] + eff * ne[0], p_curr[1] + eff * ne[1]))
+            continue
+
+        bx /= bl
+        by /= bl
+        cos_half = max(bx * ne[0] + by * ne[1], 0.25)  # clamp spikes
+        d = eff / cos_half
+
+        result.append((p_curr[0] + d * bx, p_curr[1] + d * by))
+
+    return result
+
+
+def _point_in_polygon(point: tuple[float, float],
+                      poly: list[tuple[float, float]]) -> bool:
+    """Ray-casting point-in-polygon test."""
+    x, y = point
+    n = len(poly)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if ((yi > y) != (yj > y)) and (
+            x < (xj - xi) * (y - yi) / (yj - yi) + xi
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+def compute_polygon_holes(
+    polygons: list[list[tuple[float, float]]],
+) -> list[bool]:
+    """Determine which polygons are holes using even-odd containment.
+
+    A polygon is a hole if it is contained within an odd number of
+    other polygons (tested at its first vertex).
+    """
+    n = len(polygons)
+    result: list[bool] = []
+    for i in range(n):
+        pt = polygons[i][0]
+        count = sum(
+            1 for j in range(n)
+            if j != i and _point_in_polygon(pt, polygons[j])
+        )
+        result.append(count % 2 == 1)
+    return result

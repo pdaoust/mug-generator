@@ -15,6 +15,7 @@ include <mug_params.scad>
 include <mug_outer_profile.scad>
 include <mug_inner_profile.scad>
 include <handle_stations.scad>
+include <mark_polygon.scad>
 
 // --- Render control ---
 render_part = "all";   // "all", "half_a", "half_b", "base"
@@ -49,8 +50,55 @@ _solid_outer_profile = concat(
      [0, mug_outer_profile[0][1]]]
 );
 
-module mug_outer_solid() {
+// --- Maker's mark stamp ---
+// Each subpath is skinned between the original polygon (at z=0) and a
+// uniformly outset draft polygon (at z=mark_depth).  The outset is
+// precomputed in Python as a per-vertex miter offset.
+//
+// Even-odd fill: hole subpaths are subtracted from fill subpaths.
+// Hole skins are extended by _mark_eps in both Z directions so the
+// boolean difference has no coincident faces.
+_mark_eps = 0.001;
+
+module _mark_skin(i, z_lo, z_hi) {
+    skin([
+        [for (p = mark_polygons[i]) [p[0], p[1], z_lo]],
+        [for (p = mark_polygons_draft[i]) [p[0], p[1], z_hi]]
+    ], slices = 0, caps = true, method = "direct");
+}
+
+module mark_stamp() {
+    if (len(mark_polygons) > 0)
+        difference() {
+            for (i = [0:len(mark_polygons) - 1])
+                if (!mark_polygon_is_hole[i])
+                    _mark_skin(i, 0, mark_depth);
+            for (i = [0:len(mark_polygons) - 1])
+                if (mark_polygon_is_hole[i])
+                    _mark_skin(i, -_mark_eps, mark_depth + _mark_eps);
+        }
+}
+
+module _mug_outer_solid_raw() {
     rotate_extrude() polygon(points = _solid_outer_profile);
+}
+
+module mug_outer_solid() {
+    if (mark_enabled && mark_inset) {
+        difference() {
+            _mug_outer_solid_raw();
+            translate([0, 0, mug_min_z])
+                mark_stamp();
+        }
+    } else if (mark_enabled && !mark_inset) {
+        union() {
+            _mug_outer_solid_raw();
+            translate([0, 0, mug_min_z - mark_depth])
+                mark_stamp();
+        }
+    } else {
+        _mug_outer_solid_raw();
+    }
 }
 
 // Solid mug inner: same axis-closure treatment as the outer.
@@ -131,7 +179,8 @@ function mug_r_at_z(z) =
         ]
     ) len(results) > 0 ? max(results) : prof[0][0];
 
-_foot_z = is_undef(foot_concavity_z) ? 0 : foot_concavity_z;
+_foot_z = (is_undef(foot_concavity_z) ? 0 : foot_concavity_z)
+        + (mark_enabled && mark_inset ? mark_depth : 0);
 
 // Handle rail projections onto the XZ plane (2D mould coordinates:
 // X = 3D X, Y = 3D Z).  Inner = closest to mug (min X per station),

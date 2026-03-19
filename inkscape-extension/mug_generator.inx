@@ -48,6 +48,15 @@ Drawn at any convenient size — it will be normalised and
 scaled per-station by the rail geometry. Winding direction
 is corrected automatically.
       </label>
+
+      <separator />
+      <label appearance="header">mark (optional)</label>
+      <label>
+One or more paths forming the maker's mark. Drawn at actual
+size — position in the SVG is arbitrary, the mark will be
+centred on the mug base. Compound paths (letters with holes)
+are supported.
+      </label>
     </page>
 
     <page name="settings" gui-text="Settings">
@@ -108,6 +117,15 @@ is corrected automatically.
       <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
              gui-text="Clay shrinkage (%):"
              gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>
+
+      <separator />
+      <label appearance="header">Maker's mark</label>
+      <param name="mark_depth" type="float" min="0.1" max="5.0" precision="1"
+             gui-text="Mark depth (mm):">1.0</param>
+      <param name="mark_inset" type="bool"
+             gui-text="Inset (debossed):">true</param>
+      <param name="mark_draft_angle" type="float" min="0" max="60" precision="1"
+             gui-text="Mark draft angle (°):">45.0</param>
     </page>
 
   </param>

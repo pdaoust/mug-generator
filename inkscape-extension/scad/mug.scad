@@ -11,6 +11,7 @@ include <mug_params.scad>
 include <mug_outer_profile.scad>
 include <mug_inner_profile.scad>
 include <handle_stations.scad>
+include <mark_polygon.scad>
 
 // --- Mug body (outer minus inner, both drawn profiles) ---
 //
@@ -63,11 +64,50 @@ module handle() {
     skin(handle_stations_extended, slices=0, caps=true, method="reindex");
 }
 
+// --- Maker's mark ---
+
+mug_min_z = min([for (p = mug_outer_profile) p[1]]);
+
+_mark_eps = 0.001;
+
+module _mark_skin(i, z_lo, z_hi) {
+    skin([
+        [for (p = mark_polygons[i]) [p[0], p[1], z_lo]],
+        [for (p = mark_polygons_draft[i]) [p[0], p[1], z_hi]]
+    ], slices = 0, caps = true, method = "direct");
+}
+
+module mark_stamp() {
+    if (len(mark_polygons) > 0)
+        difference() {
+            for (i = [0:len(mark_polygons) - 1])
+                if (!mark_polygon_is_hole[i])
+                    _mark_skin(i, 0, mark_depth);
+            for (i = [0:len(mark_polygons) - 1])
+                if (mark_polygon_is_hole[i])
+                    _mark_skin(i, -_mark_eps, mark_depth + _mark_eps);
+        }
+}
+
 // --- Assembly ---
 
 module mug_assembly() {
     union() {
-        mug_body();
+        if (mark_enabled && mark_inset) {
+            difference() {
+                mug_body();
+                translate([0, 0, mug_min_z])
+                    mark_stamp();
+            }
+        } else if (mark_enabled && !mark_inset) {
+            union() {
+                mug_body();
+                translate([0, 0, mug_min_z - mark_depth])
+                    mark_stamp();
+            }
+        } else {
+            mug_body();
+        }
         handle();
     }
 }

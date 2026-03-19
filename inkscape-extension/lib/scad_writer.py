@@ -143,7 +143,47 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
         if key in params:
             lines.append(f"{key} = {params[key]:.6f};\n")
 
+    # Maker's mark parameters
+    lines.append(f"mark_enabled = {'true' if params.get('mark_enabled') else 'false'};\n")
+    lines.append(f"mark_depth = {params.get('mark_depth', 1.0):.6f};\n")
+    lines.append(f"mark_inset = {'true' if params.get('mark_inset', True) else 'false'};\n")
+    lines.append(f"mark_draft_angle = {params.get('mark_draft_angle', 45.0):.6f};\n")
+
     (output_dir / "mug_params.scad").write_text("".join(lines))
+
+
+def _emit_polygon_list(name: str, polys: list | None, lines: list[str]) -> None:
+    """Append a named array-of-polygon-arrays to *lines*."""
+    if not polys:
+        lines.append(f"{name} = [];\n")
+        return
+    lines.append(f"{name} = [\n")
+    for si, poly in enumerate(polys):
+        pts = poly[:-1] if _is_closed(poly) else poly
+        lines.append("  [\n")
+        for pi, pt in enumerate(pts):
+            comma = "," if pi < len(pts) - 1 else ""
+            lines.append(f"    {_format_point_2d(pt)}{comma}\n")
+        comma = "," if si < len(polys) - 1 else ""
+        lines.append(f"  ]{comma}\n")
+    lines.append("];\n")
+
+
+@emitter("mark_polygon")
+def _emit_mark_polygon(data: dict[str, Any], output_dir: Path) -> None:
+    """Emit mark_polygon.scad with mark polygon + draft data."""
+    lines = [HEADER]
+    _emit_polygon_list("mark_polygons", data.get("mark_polygons"), lines)
+    _emit_polygon_list("mark_polygons_draft", data.get("mark_polygons_draft"), lines)
+
+    holes = data.get("mark_polygon_is_hole")
+    if not holes:
+        lines.append("mark_polygon_is_hole = [];\n")
+    else:
+        vals = ", ".join("true" if h else "false" for h in holes)
+        lines.append(f"mark_polygon_is_hole = [{vals}];\n")
+
+    (output_dir / "mark_polygon.scad").write_text("".join(lines))
 
 
 @emitter("static_files")

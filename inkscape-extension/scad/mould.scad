@@ -432,7 +432,7 @@ module case_upper_half(pos_y) {
 // X and Y half-extents match the top parts' bounding box so the
 // base sits flush under the upper halves at the Z seam.
 
-_base_x_half = mug_max_radius + plaster_thickness;
+_base_x_half = mug_r_at_z(_foot_z) + plaster_thickness;
 _base_y_half = mould_y_half;
 _base_z_bot = mug_min_z - plaster_thickness;
 

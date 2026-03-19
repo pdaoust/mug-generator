@@ -48,64 +48,88 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         ]
 
     mug_body_paths = get_layer_paths(svg_root, "mug body")
-    handle_rail_paths = get_layer_paths(svg_root, "handle rails")
-    side_rail_paths = get_layer_paths(svg_root, "side rails")
-    profile_paths = get_layer_paths(svg_root, "handle profile")
-
     mug_outer_mm = svg_to_mm(mug_body_paths[0])
     mug_inner_mm = svg_to_mm(mug_body_paths[1])
-    inner_rail_mm = svg_to_mm(handle_rail_paths[0])
-    outer_rail_mm = svg_to_mm(handle_rail_paths[1])
-
-    side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
-                 for p in side_rail_paths[0]]
-
-    handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
     mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
 
-    def mug_true_radius_at_z(z):
-        return mug_surface.radius_at_z(z)
+    # Check for optional handle layers
+    handle_enabled = True
+    try:
+        handle_rail_paths = get_layer_paths(svg_root, "handle rails")
+        side_rail_paths = get_layer_paths(svg_root, "side rails")
+        profile_paths = get_layer_paths(svg_root, "handle profile")
+    except ValueError:
+        handle_enabled = False
 
-    midpoints = _build_midpoint_curve(inner_rail_mm, outer_rail_mm)
-    mid_cl = _cumulative_chord_lengths(midpoints)
-    mid_total = mid_cl[-1]
+    handle_stations_3d = []
+    stations = []
+    if handle_enabled:
+        inner_rail_mm = svg_to_mm(handle_rail_paths[0])
+        outer_rail_mm = svg_to_mm(handle_rail_paths[1])
 
-    n_stations = compute_n(fn, fa, fs, mid_total)
-    n_stations = max(n_stations, 5)
+        side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
+                     for p in side_rail_paths[0]]
 
-    # Re-parse profiles with bezier subdivision matching revolution /
-    # loft resolution.  Line segments are unaffected.
-    import math
-    from lib.units import to_mm as _to_mm
+        handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
-    avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                  - mug_surface.axis_x)
-    circumference = 2.0 * math.pi * avg_radius
-    n_rev = compute_n(fn, fa, fs, circumference)
-    body_seg_len = circumference / n_rev
-    handle_seg_len = mid_total / n_stations
+        def mug_true_radius_at_z(z):
+            return mug_surface.radius_at_z(z)
 
-    mm_per_svg = _to_mm(scale, doc_units)
-    svg_body_seg = body_seg_len / mm_per_svg
-    svg_handle_seg = handle_seg_len / mm_per_svg
+        midpoints = _build_midpoint_curve(inner_rail_mm, outer_rail_mm)
+        mid_cl = _cumulative_chord_lengths(midpoints)
+        mid_total = mid_cl[-1]
 
-    mug_body_paths = get_layer_paths(svg_root, "mug body",
-                                     max_seg_len=svg_body_seg)
-    profile_paths = get_layer_paths(svg_root, "handle profile",
-                                    max_seg_len=svg_handle_seg)
-    mug_outer_mm = svg_to_mm(mug_body_paths[0])
-    mug_inner_mm = svg_to_mm(mug_body_paths[1])
-    handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
+        n_stations = compute_n(fn, fa, fs, mid_total)
+        n_stations = max(n_stations, 5)
 
-    stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
-    stations = apply_side_rails(stations, side_rail, side_rail)
+        import math
+        from lib.units import to_mm as _to_mm
 
-    handle_stations_3d = generate_handle_stations(
-        handle_profile, stations,
-        mug_axis_x=mug_surface.axis_x,
-        mug_radius_at_z=mug_true_radius_at_z,
-    )
+        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
+                      - mug_surface.axis_x)
+        circumference = 2.0 * math.pi * avg_radius
+        n_rev = compute_n(fn, fa, fs, circumference)
+        body_seg_len = circumference / n_rev
+        handle_seg_len = mid_total / n_stations
+
+        mm_per_svg = _to_mm(scale, doc_units)
+        svg_body_seg = body_seg_len / mm_per_svg
+        svg_handle_seg = handle_seg_len / mm_per_svg
+
+        mug_body_paths = get_layer_paths(svg_root, "mug body",
+                                         max_seg_len=svg_body_seg)
+        profile_paths = get_layer_paths(svg_root, "handle profile",
+                                        max_seg_len=svg_handle_seg)
+        mug_outer_mm = svg_to_mm(mug_body_paths[0])
+        mug_inner_mm = svg_to_mm(mug_body_paths[1])
+        handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
+
+        stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
+        stations = apply_side_rails(stations, side_rail, side_rail)
+
+        handle_stations_3d = generate_handle_stations(
+            handle_profile, stations,
+            mug_axis_x=mug_surface.axis_x,
+            mug_radius_at_z=mug_true_radius_at_z,
+        )
+    else:
+        import math
+        from lib.units import to_mm as _to_mm
+
+        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
+                      - mug_surface.axis_x)
+        circumference = 2.0 * math.pi * avg_radius
+        n_rev = compute_n(fn, fa, fs, circumference)
+        body_seg_len = circumference / n_rev
+
+        mm_per_svg = _to_mm(scale, doc_units)
+        svg_body_seg = body_seg_len / mm_per_svg
+
+        mug_body_paths = get_layer_paths(svg_root, "mug body",
+                                         max_seg_len=svg_body_seg)
+        mug_outer_mm = svg_to_mm(mug_body_paths[0])
+        mug_inner_mm = svg_to_mm(mug_body_paths[1])
 
     # Clay shrinkage compensation
     clay_scale = 100.0 / (100.0 - clay_shrinkage) if clay_shrinkage > 0 else 1.0
@@ -169,28 +193,36 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     else:
         mould_params["mould_type"] = 2
 
+    if handle_enabled:
+        scaled_handle_stations = [
+            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
+             for pt in poly]
+            for poly in handle_stations_3d
+        ]
+        scaled_handle_path = [
+            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
+             s.centroid[2] * clay_scale]
+            for s in stations
+        ]
+    else:
+        scaled_handle_stations = []
+        scaled_handle_path = []
+
     data = {
         "mug_outer_profile": scad_outer_profile,
         "mug_inner_profile": scad_inner_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
         "mark_polygons_draft": mark_polygons_draft if mark_enabled else None,
         "mark_polygon_is_hole": mark_polygon_is_hole if mark_enabled else None,
-        "handle_stations": [
-            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
-             for pt in poly]
-            for poly in handle_stations_3d
-        ],
-        "handle_path": [
-            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
-             s.centroid[2] * clay_scale]
-            for s in stations
-        ],
+        "handle_stations": scaled_handle_stations,
+        "handle_path": scaled_handle_path,
         "mug_params": {
             "fn": fn,
             "fa": fa,
             "fs": fs,
             "axis_x": mug_surface.axis_x * clay_scale,
             "clay_shrinkage_pct": clay_shrinkage,
+            "handle_enabled": handle_enabled,
             **mould_params,
         },
     }
@@ -330,3 +362,42 @@ class TestIntegration:
         mark_text = (tmp_path / "mark_polygon.scad").read_text()
         assert "mark_polygons" in mark_text
         assert "mark_polygons = []" not in mark_text
+
+    def test_no_handle_pipeline(self, tmp_path):
+        """Pipeline works without handle layers."""
+        fixture = FIXTURE_SVG.parent / "sample_no_handle.svg"
+        data = _run_pipeline(fixture, tmp_path, fn=20)
+
+        assert (tmp_path / "mug_outer_profile.scad").exists()
+        assert (tmp_path / "mug_inner_profile.scad").exists()
+        assert (tmp_path / "handle_stations.scad").exists()
+        assert (tmp_path / "handle_path.scad").exists()
+        assert (tmp_path / "mug_params.scad").exists()
+        assert (tmp_path / "mug.scad").exists()
+
+        assert data["handle_stations"] == []
+        assert data["handle_path"] == []
+
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "handle_enabled = false" in text
+
+        hs_text = (tmp_path / "handle_stations.scad").read_text()
+        assert "handle_stations = []" in hs_text
+
+        hp_text = (tmp_path / "handle_path.scad").read_text()
+        assert "handle_path = []" in hp_text
+
+    def test_no_handle_profiles_valid(self, tmp_path):
+        """Mug profiles are valid even without handle layers."""
+        fixture = FIXTURE_SVG.parent / "sample_no_handle.svg"
+        _run_pipeline(fixture, tmp_path, fn=20)
+
+        outer_text = (tmp_path / "mug_outer_profile.scad").read_text()
+        outer = _parse_scad_array(outer_text, "mug_outer_profile")
+        assert len(outer) >= 2
+
+    def test_handle_enabled_with_handle(self, tmp_path):
+        """handle_enabled is true when all handle layers are present."""
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "handle_enabled = true" in text

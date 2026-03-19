@@ -97,26 +97,16 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Extract and validate layers
         errors = []
         layers = {}
-        expected = {
+
+        # Required layers
+        required = {
             "mug body": {
                 "min": 2, "max": 2,
                 "desc": "outer wall profile and inner wall profile (half-profiles in the XZ plane)",
             },
-            "handle rails": {
-                "min": 2, "max": 2,
-                "desc": "inner rail (near mug) and outer rail (far from mug)",
-            },
-            "side rails": {
-                "min": 1, "max": 1,
-                "desc": "one side rail path (X = half-width, Y = position along handle)",
-            },
-            "handle profile": {
-                "min": 1, "max": 1,
-                "desc": "one closed path for the handle cross-section shape",
-            },
         }
 
-        for label, spec in expected.items():
+        for label, spec in required.items():
             try:
                 paths = get_layer_paths(svg, label)
             except ValueError:
@@ -147,80 +137,141 @@ class MugGeneratorEffect(inkex.EffectExtension):
             inkex.errormsg("Mug Generator — layer validation failed:\n\n" + "\n\n".join(errors))
             return
 
+        # Optional handle layers — all three must be present to generate a handle
+        handle_layers = {
+            "handle rails": {
+                "min": 2, "max": 2,
+                "desc": "inner rail (near mug) and outer rail (far from mug)",
+            },
+            "side rails": {
+                "min": 1, "max": 1,
+                "desc": "one side rail path (X = half-width, Y = position along handle)",
+            },
+            "handle profile": {
+                "min": 1, "max": 1,
+                "desc": "one closed path for the handle cross-section shape",
+            },
+        }
+
+        handle_enabled = True
+        handle_errors = []
+        for label, spec in handle_layers.items():
+            try:
+                paths = get_layer_paths(svg, label)
+            except ValueError:
+                handle_enabled = False
+                continue
+
+            n = len(paths)
+            if n < spec["min"] or n > spec["max"]:
+                handle_errors.append(
+                    f"Layer '{label}' has {n} path(s), expected {spec['min']}.\n"
+                    f"  It needs {spec['desc']}."
+                )
+                handle_enabled = False
+            else:
+                layers[label] = paths
+
+        # If some handle layers exist but have errors, report them
+        if handle_errors and any(l in layers for l in handle_layers):
+            inkex.errormsg(
+                "Mug Generator — handle layer validation failed:\n\n"
+                + "\n\n".join(handle_errors)
+            )
+            return
+
+        # All three handle layers must be present
+        if handle_enabled:
+            handle_enabled = all(l in layers for l in handle_layers)
+
         mug_body_paths = layers["mug body"]
-        handle_rail_paths = layers["handle rails"]
-        side_rail_paths = layers["side rails"]
-        profile_paths = layers["handle profile"]
 
         # Convert to mm
         mug_outer_mm = svg_to_mm(mug_body_paths[0])
         mug_inner_mm = svg_to_mm(mug_body_paths[1])
-        inner_rail_mm = svg_to_mm(handle_rail_paths[0])
-        outer_rail_mm = svg_to_mm(handle_rail_paths[1])
-
-        # Side rail: X = half-width in mm, Y in mm (normalized to [0,1] later)
-        # Single rail is used for both left and right (symmetric handle).
-        side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
-                     for p in side_rail_paths[0]]
-
-        # Handle profile: raw 2D shape (no coordinate inversion)
-        handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
         # Build mug surface (outer profile — used for cylinder wrapping)
         mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
 
-        def mug_true_radius_at_z(z):
-            return mug_surface.radius_at_z(z)
+        # Handle pipeline (only if all three handle layers are present)
+        handle_stations_3d = []
+        stations = []
+        if handle_enabled:
+            handle_rail_paths = layers["handle rails"]
+            side_rail_paths = layers["side rails"]
+            profile_paths = layers["handle profile"]
 
-        # Compute number of stations
-        from lib.rail_sampler import _cumulative_chord_lengths, _build_midpoint_curve
-        midpoints = _build_midpoint_curve(inner_rail_mm, outer_rail_mm)
-        mid_cl = _cumulative_chord_lengths(midpoints)
-        mid_total = mid_cl[-1]
+            inner_rail_mm = svg_to_mm(handle_rail_paths[0])
+            outer_rail_mm = svg_to_mm(handle_rail_paths[1])
 
-        n_stations = compute_n(
-            self.options.fn, self.options.fa, self.options.fs, mid_total
-        )
+            side_rail = [(to_mm(p[0] * scale, doc_units), to_mm(p[1] * scale, doc_units))
+                         for p in side_rail_paths[0]]
 
-        # Re-parse mug body and handle profile with bezier subdivision
-        # matching the revolution / loft resolution, so the surface
-        # texture is congruent in both directions.  Line segments are
-        # unaffected — only curves are resampled.
-        import math
-        from lib.units import to_mm as _to_mm
+            handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
-        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                      - mug_surface.axis_x)
-        circumference = 2.0 * math.pi * avg_radius
-        n_rev = compute_n(self.options.fn, self.options.fa,
-                          self.options.fs, circumference)
-        body_seg_len = circumference / n_rev
-        handle_seg_len = mid_total / n_stations
+            def mug_true_radius_at_z(z):
+                return mug_surface.radius_at_z(z)
 
-        mm_per_svg = _to_mm(scale, doc_units)
-        svg_body_seg = body_seg_len / mm_per_svg
-        svg_handle_seg = handle_seg_len / mm_per_svg
+            from lib.rail_sampler import _cumulative_chord_lengths, _build_midpoint_curve
+            midpoints = _build_midpoint_curve(inner_rail_mm, outer_rail_mm)
+            mid_cl = _cumulative_chord_lengths(midpoints)
+            mid_total = mid_cl[-1]
 
-        mug_body_paths = get_layer_paths(svg, "mug body",
-                                         max_seg_len=svg_body_seg)
-        profile_paths = get_layer_paths(svg, "handle profile",
-                                        max_seg_len=svg_handle_seg)
-        mug_outer_mm = svg_to_mm(mug_body_paths[0])
-        mug_inner_mm = svg_to_mm(mug_body_paths[1])
-        handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
+            n_stations = compute_n(
+                self.options.fn, self.options.fa, self.options.fs, mid_total
+            )
 
-        # Sample rails
-        stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
+            # Re-parse with bezier subdivision matching loft resolution
+            import math
+            from lib.units import to_mm as _to_mm
 
-        # Apply side rails (same rail for both sides — symmetric handle)
-        stations = apply_side_rails(stations, side_rail, side_rail)
+            avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
+                          - mug_surface.axis_x)
+            circumference = 2.0 * math.pi * avg_radius
+            n_rev = compute_n(self.options.fn, self.options.fa,
+                              self.options.fs, circumference)
+            body_seg_len = circumference / n_rev
+            handle_seg_len = mid_total / n_stations
 
-        # Generate handle cross-sections (endcap profiles wrap onto mug cylinder)
-        handle_stations_3d = generate_handle_stations(
-            handle_profile, stations,
-            mug_axis_x=mug_surface.axis_x,
-            mug_radius_at_z=mug_true_radius_at_z,
-        )
+            mm_per_svg = _to_mm(scale, doc_units)
+            svg_body_seg = body_seg_len / mm_per_svg
+            svg_handle_seg = handle_seg_len / mm_per_svg
+
+            mug_body_paths = get_layer_paths(svg, "mug body",
+                                             max_seg_len=svg_body_seg)
+            profile_paths = get_layer_paths(svg, "handle profile",
+                                            max_seg_len=svg_handle_seg)
+            mug_outer_mm = svg_to_mm(mug_body_paths[0])
+            mug_inner_mm = svg_to_mm(mug_body_paths[1])
+            handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
+
+            stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
+            stations = apply_side_rails(stations, side_rail, side_rail)
+
+            handle_stations_3d = generate_handle_stations(
+                handle_profile, stations,
+                mug_axis_x=mug_surface.axis_x,
+                mug_radius_at_z=mug_true_radius_at_z,
+            )
+        else:
+            # Re-parse mug body with bezier subdivision even without handle
+            import math
+            from lib.units import to_mm as _to_mm
+
+            avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
+                          - mug_surface.axis_x)
+            circumference = 2.0 * math.pi * avg_radius
+            n_rev = compute_n(self.options.fn, self.options.fa,
+                              self.options.fs, circumference)
+            body_seg_len = circumference / n_rev
+
+            mm_per_svg = _to_mm(scale, doc_units)
+            svg_body_seg = body_seg_len / mm_per_svg
+
+            mug_body_paths = get_layer_paths(svg, "mug body",
+                                             max_seg_len=svg_body_seg)
+            mug_outer_mm = svg_to_mm(mug_body_paths[0])
+            mug_inner_mm = svg_to_mm(mug_body_paths[1])
 
         # Clay shrinkage compensation: enlarge the model so the fired
         # piece matches the drawn size.
@@ -232,16 +283,20 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # All mug geometry is scaled by the clay shrinkage factor.
         scad_outer_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_outer_mm]
         scad_inner_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_inner_mm]
-        scaled_handle_stations = [
-            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
-             for pt in poly]
-            for poly in handle_stations_3d
-        ]
-        scaled_handle_path = [
-            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
-             s.centroid[2] * clay_scale]
-            for s in stations
-        ]
+        if handle_enabled:
+            scaled_handle_stations = [
+                [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
+                 for pt in poly]
+                for poly in handle_stations_3d
+            ]
+            scaled_handle_path = [
+                [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
+                 s.centroid[2] * clay_scale]
+                for s in stations
+            ]
+        else:
+            scaled_handle_stations = []
+            scaled_handle_path = []
 
         # Extract maker's mark (optional layer)
         mark_raw = get_layer_mark_polygons(svg, "mark")
@@ -318,6 +373,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "fs": self.options.fs,
                 "axis_x": mug_surface.axis_x * clay_scale,
                 "clay_shrinkage_pct": shrinkage_pct,
+                "handle_enabled": handle_enabled,
                 "mark_enabled": mark_enabled,
                 "mark_depth": self.options.mark_depth,
                 "mark_inset": self.options.mark_inset,
@@ -335,7 +391,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Preview
         if self.options.preview:
             mug_outer_svg = [(p[0] * scale, p[1] * scale) for p in mug_body_paths[0]]
-            side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
+            side_rail_svg = None
+            if handle_enabled:
+                side_rail_paths = layers["side rails"]
+                side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
             draw_preview(svg, mug_outer_svg, stations, handle_stations_3d,
                          side_rail_svg, vb_bottom,
                          funnel_outline_mm=funnel_outline_mm)

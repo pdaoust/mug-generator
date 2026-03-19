@@ -54,14 +54,15 @@ function nudge_radial(pts, axis_x, amount) =
         [axis_x + dx * scale, dy * scale, p[2]]
     ];
 
-handle_stations_extended = concat(
+handle_stations_extended = handle_enabled ? concat(
     [nudge_radial(handle_stations[0], mug_axis_x, -1)],
     handle_stations,
     [nudge_radial(handle_stations[len(handle_stations)-1], mug_axis_x, -1)]
-);
+) : [];
 
 module handle() {
-    skin(handle_stations_extended, slices=0, caps=true, method="reindex");
+    if (handle_enabled)
+        skin(handle_stations_extended, slices=0, caps=true, method="reindex");
 }
 
 // --- Maker's mark ---
@@ -108,7 +109,8 @@ module mug_assembly() {
         } else {
             mug_body();
         }
-        handle();
+        if (handle_enabled)
+            handle();
     }
 }
 

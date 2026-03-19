@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.dtd"
+     width="200mm" height="200mm" viewBox="0 0 200 200">
+
+  <sodipodi:namedview inkscape:document-units="mm" />
+
+  <!-- Mug body: outer and inner profiles -->
+  <g inkscape:groupmode="layer" inkscape:label="mug body">
+    <!-- Outer profile -->
+    <path d="M 30,20 L 35,20 L 35,180 L 30,180" />
+    <!-- Inner profile (offset inward by ~3mm wall, shorter for floor) -->
+    <path d="M 30,23 L 32,23 L 32,180 L 30,180" />
+  </g>
+
+</svg>

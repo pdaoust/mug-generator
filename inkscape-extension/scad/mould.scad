@@ -30,7 +30,9 @@ mug_max_z = max([for (p = mug_outer_profile) p[1]]);
 mug_min_z = min([for (p = mug_outer_profile) p[1]]);
 
 inner_top_z = max([for (p = mug_inner_profile) p[1]]);
-handle_max_y = max([for (s = handle_stations) for (p = s) abs(p[1])]);
+handle_max_y = handle_enabled
+    ? max([for (s = handle_stations) for (p = s) abs(p[1])])
+    : 0;
 mould_y_half = max(mug_max_radius, handle_max_y) + plaster_thickness;
 
 // =====================================================================
@@ -132,31 +134,32 @@ function nudge_radial(pts, axis_x, amount) =
         [axis_x + dx * s, dy * s, p[2]]
     ];
 
-handle_stations_extended = concat(
+handle_stations_extended = handle_enabled ? concat(
     [nudge_radial(handle_stations[0], mug_axis_x, -1)],
     handle_stations,
     [nudge_radial(handle_stations[len(handle_stations)-1], mug_axis_x, -1)]
-);
+) : [];
 
 module handle() {
-    skin(handle_stations_extended, slices=0, caps=true, method="reindex");
+    if (handle_enabled)
+        skin(handle_stations_extended, slices=0, caps=true, method="reindex");
 }
 
 // Mug positive: outer solid + inner solid (with integrated filler hole) + handle.
 module mug_positive() {
     mug_outer_solid();
     mug_inner_solid();
-    handle();
+    if (handle_enabled) handle();
 }
 
 // Centroid of outermost handle points (max X per station) —
 // approximates the outer handle rail for natch placement.
-_outer_handle_pts = [for (s = handle_stations)
+_outer_handle_pts = handle_enabled ? [for (s = handle_stations)
     let(xs = [for (p = s) p[0]],
         mx = max(xs),
         candidates = [for (p = s) if (abs(p[0] - mx) < 0.01) p])
     candidates[0]
-];
+] : [];
 _n_ohp = len(_outer_handle_pts);
 handle_outer_centroid = _n_ohp > 0
     ? [ sum([for (p = _outer_handle_pts) p[0]]) / _n_ohp,
@@ -185,25 +188,25 @@ _foot_z = (is_undef(foot_concavity_z) ? 0 : foot_concavity_z)
 // Handle rail projections onto the XZ plane (2D mould coordinates:
 // X = 3D X, Y = 3D Z).  Inner = closest to mug (min X per station),
 // outer = farthest from mug (max X per station).
-_handle_inner_2d = [for (s = handle_stations)
+_handle_inner_2d = handle_enabled ? [for (s = handle_stations)
     let(xs = [for (p = s) p[0]],
         mn = min(xs),
         pts = [for (p = s) if (abs(p[0] - mn) < 0.01) p])
     [pts[0][0], pts[0][2]]
-];
+] : [];
 
-_handle_outer_2d = [for (s = handle_stations)
+_handle_outer_2d = handle_enabled ? [for (s = handle_stations)
     let(xs = [for (p = s) p[0]],
         mx = max(xs),
         pts = [for (p = s) if (abs(p[0] - mx) < 0.01) p])
     [pts[0][0], pts[0][2]]
-];
+] : [];
 
 // Closed handle outline: outer rail forward, inner rail reversed
-_handle_outline_2d = concat(
+_handle_outline_2d = handle_enabled ? concat(
     _handle_outer_2d,
     [for (i = [len(_handle_inner_2d)-1:-1:0]) _handle_inner_2d[i]]
-);
+) : [];
 
 // =====================================================================
 // 2D MOULD PRIMITIVES (in XY plane where X = 3D X, Y = 3D Z height)
@@ -223,16 +226,19 @@ module mould_hull_2d() {
                 mirror([1, 0]) polygon(points = mug_inner_profile);
             }
 
-            // 2. Handle outline with half plaster
-            offset(r = plaster_thickness / 2)
-                polygon(points = _handle_outline_2d);
+            if (handle_enabled) {
+                // 2. Handle outline with half plaster
+                offset(r = plaster_thickness / 2)
+                    polygon(points = _handle_outline_2d);
+            }
 
             // 3. Fill gap between mug and handle (no offset)
             polygon(points = mug_outer_profile);
             mirror([1, 0]) polygon(points = mug_outer_profile);
             polygon(points = mug_inner_profile);
             mirror([1, 0]) polygon(points = mug_inner_profile);
-            polygon(points = _handle_outer_2d);
+            if (handle_enabled)
+                polygon(points = _handle_outer_2d);
         }
         // Clip everything above inner_top_z
         translate([-1000, inner_top_z])

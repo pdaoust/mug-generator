@@ -71,15 +71,18 @@ def _emit_handle_stations(data: dict[str, Any], output_dir: Path) -> None:
     """Emit handle_stations.scad."""
     stations = data["handle_stations"]  # list of list of [x,y,z]
     lines = [HEADER]
-    lines.append("handle_stations = [\n")
-    for si, poly in enumerate(stations):
-        lines.append("  [\n")
-        for pi, pt in enumerate(poly):
-            comma = "," if pi < len(poly) - 1 else ""
-            lines.append(f"    {_format_point_3d(pt)}{comma}\n")
-        comma = "," if si < len(stations) - 1 else ""
-        lines.append(f"  ]{comma}\n")
-    lines.append("];\n")
+    if not stations:
+        lines.append("handle_stations = [];\n")
+    else:
+        lines.append("handle_stations = [\n")
+        for si, poly in enumerate(stations):
+            lines.append("  [\n")
+            for pi, pt in enumerate(poly):
+                comma = "," if pi < len(poly) - 1 else ""
+                lines.append(f"    {_format_point_3d(pt)}{comma}\n")
+            comma = "," if si < len(stations) - 1 else ""
+            lines.append(f"  ]{comma}\n")
+        lines.append("];\n")
 
     (output_dir / "handle_stations.scad").write_text("".join(lines))
 
@@ -91,11 +94,14 @@ def _emit_handle_path(data: dict[str, Any], output_dir: Path) -> None:
         return
     path = data["handle_path"]  # list of [x,y,z]
     lines = [HEADER]
-    lines.append("handle_path = [\n")
-    for i, pt in enumerate(path):
-        comma = "," if i < len(path) - 1 else ""
-        lines.append(f"  {_format_point_3d(pt)}{comma}\n")
-    lines.append("];\n")
+    if not path:
+        lines.append("handle_path = [];\n")
+    else:
+        lines.append("handle_path = [\n")
+        for i, pt in enumerate(path):
+            comma = "," if i < len(path) - 1 else ""
+            lines.append(f"  {_format_point_3d(pt)}{comma}\n")
+        lines.append("];\n")
 
     (output_dir / "handle_path.scad").write_text("".join(lines))
 
@@ -115,6 +121,8 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     if "bbox" in params:
         bb = params["bbox"]
         lines.append(f"mug_bbox = [{_format_point_3d(bb[0])}, {_format_point_3d(bb[1])}];\n")
+
+    lines.append(f"handle_enabled = {'true' if params.get('handle_enabled') else 'false'};\n")
 
     if "axis_x" in params:
         lines.append(f"mug_axis_x = {params['axis_x']:.6f};\n")

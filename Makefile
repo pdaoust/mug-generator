@@ -2,6 +2,7 @@ EXTENSION_NAME := mug-generator
 VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 DIST_DIR := dist
 BUNDLE := $(DIST_DIR)/$(EXTENSION_NAME)-$(VERSION).zip
+SIG := $(DIST_DIR)/$(EXTENSION_NAME)-$(VERSION).sig
 
 SRC_DIR := inkscape-extension
 
@@ -13,7 +14,7 @@ SCAD := $(wildcard $(SRC_DIR)/scad/*.scad)
 
 SOURCES := $(INX) $(PY_MAIN) $(LIB_PY) $(SCAD)
 
-.PHONY: all clean test
+.PHONY: all sign clean test
 
 all: $(BUNDLE)
 
@@ -27,6 +28,10 @@ $(BUNDLE): $(SOURCES)
 		scad/*.scad \
 		-x '*/__pycache__/*' '*.pyc'
 	@echo "Built $(BUNDLE)"
+
+sign: $(BUNDLE)
+	gpg --batch --yes --output $(SIG) --detach-sign $(BUNDLE)
+	@echo "Signed $(SIG)"
 
 test:
 	.venv/bin/pytest tests/ -q

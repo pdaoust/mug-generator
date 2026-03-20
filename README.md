@@ -13,8 +13,11 @@ I owe a huge amount of gratitude to the hard work of Tony Hansen -- [this 3D-pri
 1. Install the prerequisites:
     * [Inkscape](https://inkscape.org/) 1.2 or higher
     * A recent version of [OpenSCAD](https://openscad.org/) with the [BOSL2](https://github.com/BelfrySCAD/BOSL2) library installed in its `lib/` folder (the BOSL2 readme will give you instructions)
-2. Download a snapshot of this repo and unzip it.
-3. Copy the `inkscape-extension/` folder to your Inkscape extensions folder and rename it to `mug-generator`. You can find your extensions folder from Inkscape by going **Edit** > **Preferences**, going to the **System** tab, and pressing the **Open** button on the **User Extensions** line.
+2. Download a release from this repo's [Releases page](https://github.com/pdaoust/mug-generator/releases).
+3. In Inkscape, go to **Extensions** > **Manage Extensions**.
+4. In the dialog that pops up, go to the **Install Packages** tab.
+5. Press the button at the bottom of the dialog with a folder icon on it.
+6. Select your downloaded package.
 
 ## Designing your mug
 

@@ -6,7 +6,7 @@ An Inkscape extension that turns a 2D mug design into a set of print-ready 3D mo
 * Two- or three-part case mould forms for pouring plaster into
 * A pouring funnel with an integrated lip form
 
-I owe a huge amount of gratitude to the hard work of Tony Hansen -- [this 3D-printed case mould design](https://digitalfire.com/picture/3728) of his is the inspiration for this whole project.
+I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digitalfire.com/) -- [this 3D-printed case mould design](https://digitalfire.com/picture/3728) of his is the inspiration for this whole project.
 
 ## Installing
 
@@ -17,7 +17,7 @@ I owe a huge amount of gratitude to the hard work of Tony Hansen -- [this 3D-pri
 3. In Inkscape, go to **Extensions** > **Manage Extensions**.
 4. In the dialog that pops up, go to the **Install Packages** tab.
 5. Press the button at the bottom of the dialog with a folder icon on it.
-6. Select your downloaded package.
+6. Select the package you downloaded.
 
 ## Designing your mug
 

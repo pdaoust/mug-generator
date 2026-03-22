@@ -3,6 +3,7 @@
 An Inkscape extension that turns a 2D mug design into a set of print-ready 3D models! You get:
 
 * A positive, for printing out a prototype to see how it fits in your hands
+  ![3D rendering of positive](readme-assets/positive.jpg)
 * Two- or three-part case mould forms for pouring plaster into
 * A pouring funnel with an integrated lip form
 
@@ -20,7 +21,12 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 6. Select the package you downloaded.
 
 ## Designing your mug
+Tony Hansen -- [this 3D-printed case mould design](https://digitalfire.com/picture/3728) of his is the inspiration for this whole project.
 
+## Installing
+
+1. Install the prerequisites:
+    * [Inkscape](https://inkscape.org/) 1.2 or higher
 Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/example.svg) file in the root of this repo shows you all the parts. Refer to that file while you're reading the steps below.
 
 1. Create five layers with the following names:
@@ -31,8 +37,8 @@ Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/exa
         * `handle profile`: this'll hold the cross-section of the handle.
     * `mark` (optional): this'll hold your maker's mark.
 2. In the `mug body` layer, create two closed shapes in the bottom left corner of your document:
-    * The outside of the mug body, including the foot and outer half of the lip.
-    * The inside of the mug body, including the inner half of the lip. From the lip, create a rectangle that goes up about 15 or 20 mm -- this will be your pouring spout.
+    * The right half of the outside of the mug body, including the foot and outer half of the lip. The top should be closed and horizonal, going from the top of the lip to the left-hand edge of the page.
+    * The inside of the mug body, including the inner half of the lip. From the top point of the lip, add a rectangle that goes up about 15 or 20 mm -- this will be your pouring spout.
 3. In the `handle rails` layer, create two lines: the outside and inside of the handle shape. The endpoints of these lines _must_ touch the outside mug body.
 4. In the `handle side rails` layer, create one line that defines half of the side-to-side shape of the mug. The height doesn't matter -- it'll get stretched along the entire handle -- but the width and the distance from the left side of the page does.
 5. In the `handle profile` layer, create one closed shape that defines the cross-section of your handle as it would appear if you sliced through the bottom part of the curve. The size gets completely ignored -- the shape is simply extruded along the entire handle path, changing size to fit between all four handle rails.
@@ -58,7 +64,7 @@ Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/exa
     * **Wall thickness**: 0.8mm (two nozzles wide).
     * **Bottom thickness** (case mould forms): one or two layers only -- just enough for it to adhere and hold together. Later on you'll want to punch through the bottom in order to remove the form from the plaster.
     * **Top thickness** (case mould forms): 0.8mm minus however thick you set the bottom to.
-    * **Layer height**: as fine as you can get it, unless you plan to post-process with sandpaper or some sort of varnish.
+    * **Layer height**: as fine as you can get it, unless you plan to post-process with sandpaper or some sort of varnish. **Note**: Make sure your layer height setting in the dialog matches this.
     * **Infill**: lightning -- there will be a lot of interior in these forms and it's not worth it to print a strong infill.
     * **Ironing**: yeah, probably.
     * **Support**: none, all parts are designed to be printed without support.
@@ -72,9 +78,10 @@ Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/exa
 ## Warnings
 
 * As I mentioned before, don't create a mug handle profile that will cause the part to get stuck when you try to take the two pieces apart. No indentations on the top/bottom surface.
-    * This also goes for your mug body -- don't create any weird pockets or overhangs. The only exception is the foot, which can be concave -- the extension will automatically build a three-part mould for you if it detects a concave foot.
-* The handle inner/outer profile endpoints must touch the mug body outer profile. By default, Inkscape will try to snap the endpoint to the mug body if you move it close enough. If you're worried, you can always move the endpoint into the mug body by a fraction of a mm.
+    * This also goes for your mug body -- don't create any weird pockets or overhangs. The only exception is the foot, which can be concave -- this tool will automatically build a three-part mould for you if it detects a concave foot.
+* The handle inner/outer profile endpoints must touch the mug body outer profile. By default, Inkscape will try to snap the endpoint to the mug body if you move it close enough. If you're worried, you can always poke the endpoint into the mug body by a fraction of a mm.
 * Make sure you name your layers exactly as they appear above.
 * Higher quality parameters (`$fa`, `$fn`, `$fs`) result in dramatically longer rendering times. Start with `$fn = 50` for your prototypes, then crank it up to 200 for the case mould.
 * Dramatic curves near handle attachment points might result in what's called 'degenerate' geometry -- creating pockets that cause rendering, slicing, or printing to fail in weird ways.
-* This project was 100% AI vibe-coded. I take no responsibility for the quality of the code. I was more interested in results than I was in the craft of writing code -- I'll save the craft for the pottery studio!
+* If you include a maker's mark, it gets generated slightly weirdly -- instead of a beveled edge, it's made up of a stack of increasingly smaller versions of the same shape. This is because the most obvious way of bevelling -- skinning between an enlarged and shrunken version of the mark -- creates strange mangled artifacts at the corners. Each slice in the stack is one layer height thick, so make sure your **Layer Height** quality setting matches your print settings!
+* This project was 100% AI vibe-coded with Claude Opus 4.6. I take no responsibility for the quality of the code. I was more interested in results than I was in the craft of writing code -- I'll save the craft for the pottery studio!

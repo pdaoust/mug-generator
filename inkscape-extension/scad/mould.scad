@@ -53,50 +53,64 @@ _solid_outer_profile = concat(
 );
 
 // --- Maker's mark stamp ---
-// Each subpath is skinned between the original polygon (at z=0) and a
-// uniformly outset draft polygon (at z=mark_depth).  The outset is
-// precomputed in Python as a per-vertex miter offset.
+// Uses polygon(points, paths) for even-odd fill — OpenSCAD handles
+// holes natively via the paths parameter, no boolean difference needed.
 //
-// Even-odd fill: hole subpaths are subtracted from fill subpaths.
-// Hole skins are extended by _mark_eps in both Z directions so the
-// boolean difference has no coincident faces.
-_mark_eps = 0.001;
+// The drawn paths are the middle of the stamp.  Draft angle expands
+// outward (positive offset) at z=0 and shrinks inward (negative offset)
+// at z=mark_depth, using stacked slices with OpenSCAD's offset(r=...).
+// This robustly handles self-intersection: tiny features simply
+// collapse at higher insets instead of blowing up.
 
-module _mark_skin(i, z_lo, z_hi) {
-    skin([
-        [for (p = mark_polygons[i]) [p[0], p[1], z_lo]],
-        [for (p = mark_polygons_draft[i]) [p[0], p[1], z_hi]]
-    ], slices = 0, caps = true, method = "direct");
-}
+_mark_draft = mark_depth * tan(mark_draft_angle);
+_mark_half_draft = _mark_draft / 2;
+_mark_slices = mark_draft_angle > 0
+    ? max(2, round(mark_depth / mark_layer_height))
+    : 1;
 
+// z=0 is the mug-surface end (expanded), z=mark_depth is the
+// deep/tip end (shrunk).  Callers position and mirror as needed.
 module mark_stamp() {
-    if (len(mark_polygons) > 0)
-        difference() {
-            for (i = [0:len(mark_polygons) - 1])
-                if (!mark_polygon_is_hole[i])
-                    _mark_skin(i, 0, mark_depth);
-            for (i = [0:len(mark_polygons) - 1])
-                if (mark_polygon_is_hole[i])
-                    _mark_skin(i, -_mark_eps, mark_depth + _mark_eps);
+    if (len(mark_points) > 0) {
+        _dz = mark_depth / _mark_slices;
+        for (i = [0:_mark_slices - 1]) {
+            // +half_draft at z=0, 0 at midpoint, -half_draft at z=mark_depth
+            _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
+            translate([0, 0, i * _dz])
+                linear_extrude(height = _dz + 0.001)
+                    offset(r = _r)
+                        polygon(points = mark_points, paths = mark_paths);
         }
+    }
 }
 
 module _mug_outer_solid_raw() {
     rotate_extrude() polygon(points = _solid_outer_profile);
 }
 
+// Z of the mug base centre — where the profile meets the Z axis
+// at the bottom.  This is above mug_min_z for mugs with a foot ring
+// (mug_min_z is the foot, _mark_z is the recessed base inside it).
+_mark_z = mug_outer_profile[0][1];
+
 module mug_outer_solid() {
     if (mark_enabled && mark_inset) {
         difference() {
             _mug_outer_solid_raw();
-            translate([0, 0, mug_min_z])
-                mark_stamp();
+            // z=0 (expanded) at the base centre, cutting upward.
+            // render() forces CGAL evaluation of the stacked stamp
+            // so the boolean difference works in F5 preview.
+            translate([0, 0, _mark_z - 0.01])
+                render() mark_stamp();
         }
     } else if (mark_enabled && !mark_inset) {
         union() {
             _mug_outer_solid_raw();
-            translate([0, 0, mug_min_z - mark_depth])
-                mark_stamp();
+            // Mirror so z=0 (expanded) is at the base centre,
+            // protruding downward with the tip shrunk
+            translate([0, 0, _mark_z + 0.01])
+                mirror([0, 0, 1])
+                    mark_stamp();
         }
     } else {
         _mug_outer_solid_raw();

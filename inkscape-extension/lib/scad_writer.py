@@ -156,40 +156,49 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     lines.append(f"mark_depth = {params.get('mark_depth', 1.0):.6f};\n")
     lines.append(f"mark_inset = {'true' if params.get('mark_inset', True) else 'false'};\n")
     lines.append(f"mark_draft_angle = {params.get('mark_draft_angle', 45.0):.6f};\n")
+    lines.append(f"mark_layer_height = {params.get('mark_layer_height', 0.2):.6f};\n")
 
     (output_dir / "mug_params.scad").write_text("".join(lines))
 
 
-def _emit_polygon_list(name: str, polys: list | None, lines: list[str]) -> None:
-    """Append a named array-of-polygon-arrays to *lines*."""
-    if not polys:
-        lines.append(f"{name} = [];\n")
-        return
-    lines.append(f"{name} = [\n")
-    for si, poly in enumerate(polys):
-        pts = poly[:-1] if _is_closed(poly) else poly
-        lines.append("  [\n")
-        for pi, pt in enumerate(pts):
-            comma = "," if pi < len(pts) - 1 else ""
-            lines.append(f"    {_format_point_2d(pt)}{comma}\n")
-        comma = "," if si < len(polys) - 1 else ""
-        lines.append(f"  ]{comma}\n")
-    lines.append("];\n")
-
-
 @emitter("mark_polygon")
 def _emit_mark_polygon(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit mark_polygon.scad with mark polygon + draft data."""
-    lines = [HEADER]
-    _emit_polygon_list("mark_polygons", data.get("mark_polygons"), lines)
-    _emit_polygon_list("mark_polygons_draft", data.get("mark_polygons_draft"), lines)
+    """Emit mark_polygon.scad with flat points + paths arrays.
 
-    holes = data.get("mark_polygon_is_hole")
-    if not holes:
-        lines.append("mark_polygon_is_hole = [];\n")
+    OpenSCAD's ``polygon(points, paths)`` handles even-odd fill
+    natively, so we emit a single flat points array and a paths
+    array of index lists (one per subpath).  This avoids the
+    skin() + difference() approach that produced non-manifold meshes.
+    """
+    polys = data.get("mark_polygons")
+    lines = [HEADER]
+
+    if not polys:
+        lines.append("mark_points = [];\n")
+        lines.append("mark_paths = [];\n")
     else:
-        vals = ", ".join("true" if h else "false" for h in holes)
-        lines.append(f"mark_polygon_is_hole = [{vals}];\n")
+        # Flatten all polygons into one points array, build paths
+        all_pts: list[tuple[float, float]] = []
+        paths: list[list[int]] = []
+        for poly in polys:
+            pts = poly[:-1] if _is_closed(poly) else poly
+            start = len(all_pts)
+            path_indices = list(range(start, start + len(pts)))
+            all_pts.extend(pts)
+            paths.append(path_indices)
+
+        lines.append("mark_points = [\n")
+        for i, pt in enumerate(all_pts):
+            comma = "," if i < len(all_pts) - 1 else ""
+            lines.append(f"  {_format_point_2d(pt)}{comma}\n")
+        lines.append("];\n")
+
+        lines.append("mark_paths = [\n")
+        for i, path in enumerate(paths):
+            comma = "," if i < len(paths) - 1 else ""
+            idx_str = ", ".join(str(j) for j in path)
+            lines.append(f"  [{idx_str}]{comma}\n")
+        lines.append("];\n")
 
     (output_dir / "mark_polygon.scad").write_text("".join(lines))
 

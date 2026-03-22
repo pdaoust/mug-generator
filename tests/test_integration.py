@@ -6,10 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from lib.svg_layers import (
-    get_layer_paths, get_layer_mark_polygons,
-    offset_polygon, compute_polygon_holes,
-)
+from lib.svg_layers import get_layer_paths, get_layer_mark_polygons
 from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 from lib.mug_surface import MugSurface
 from lib.openscad_params import compute_n
@@ -31,7 +28,7 @@ def _parse_scad_array(text: str, var_name: str):
 
 def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
                    clay_shrinkage=0.0, mark_depth=1.0, mark_inset=True,
-                   mark_draft_angle=45.0):
+                   mark_draft_angle=45.0, mark_layer_height=0.2):
     """Run the full pipeline without inkex (pure stdlib XML parsing)."""
     tree = ET.parse(svg_path)
     svg_root = tree.getroot()
@@ -146,7 +143,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         mark_mm = []
         for poly in mark_raw:
             converted = [
-                (to_mm(p[0] * scale, doc_units),
+                (-to_mm(p[0] * scale, doc_units),
                  -to_mm(p[1] * scale, doc_units))
                 for p in poly
             ]
@@ -159,16 +156,6 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             [((p[0] - cx) * clay_scale, (p[1] - cy) * clay_scale) for p in poly]
             for poly in mark_mm
         ]
-
-    import math as _math
-    mark_polygons_draft = []
-    mark_polygon_is_hole = []
-    if mark_enabled:
-        draft_offset = mark_depth * _math.tan(_math.radians(mark_draft_angle))
-        mark_polygons_draft = [
-            offset_polygon(poly, draft_offset) for poly in mark_polygons
-        ]
-        mark_polygon_is_hole = compute_polygon_holes(mark_polygons)
 
     # Detect foot concavity for mould type
     concavity = mug_surface.detect_foot_concavity()
@@ -184,6 +171,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "mark_depth": mark_depth,
         "mark_inset": mark_inset,
         "mark_draft_angle": mark_draft_angle,
+        "mark_layer_height": mark_layer_height,
         "mark_enabled": mark_enabled,
     }
     if concavity:
@@ -212,8 +200,6 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "mug_outer_profile": scad_outer_profile,
         "mug_inner_profile": scad_inner_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
-        "mark_polygons_draft": mark_polygons_draft if mark_enabled else None,
-        "mark_polygon_is_hole": mark_polygon_is_hole if mark_enabled else None,
         "handle_stations": scaled_handle_stations,
         "handle_path": scaled_handle_path,
         "mug_params": {
@@ -351,7 +337,8 @@ class TestIntegration:
         text = (tmp_path / "mug_params.scad").read_text()
         assert "mark_enabled = false" in text
         mark_text = (tmp_path / "mark_polygon.scad").read_text()
-        assert "mark_polygons = []" in mark_text
+        assert "mark_points = []" in mark_text
+        assert "mark_paths = []" in mark_text
 
     def test_mark_layer_extraction(self, tmp_path):
         """With a mark layer, mark_enabled is true and polygons are populated."""
@@ -360,8 +347,10 @@ class TestIntegration:
         text = (tmp_path / "mug_params.scad").read_text()
         assert "mark_enabled = true" in text
         mark_text = (tmp_path / "mark_polygon.scad").read_text()
-        assert "mark_polygons" in mark_text
-        assert "mark_polygons = []" not in mark_text
+        assert "mark_points" in mark_text
+        assert "mark_points = []" not in mark_text
+        assert "mark_paths" in mark_text
+        assert "mark_paths = []" not in mark_text
 
     def test_no_handle_pipeline(self, tmp_path):
         """Pipeline works without handle layers."""

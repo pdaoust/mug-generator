@@ -22,10 +22,7 @@ try:
 except ImportError:
     sys.exit("inkex module not found. This extension must be run from Inkscape.")
 
-from lib.svg_layers import (
-    get_layer_paths, get_layer_mark_polygons,
-    offset_polygon, compute_polygon_holes,
-)
+from lib.svg_layers import get_layer_paths, get_layer_mark_polygons
 from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 from lib.mug_surface import MugSurface
 from lib.openscad_params import compute_n
@@ -58,6 +55,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--mark_depth", type=float, default=1.0)
         pars.add_argument("--mark_inset", type=inkex.Boolean, default=True)
         pars.add_argument("--mark_draft_angle", type=float, default=45.0)
+        pars.add_argument("--mark_layer_height", type=float, default=0.20)
 
     def effect(self):
         svg = self.svg
@@ -303,11 +301,13 @@ class MugGeneratorEffect(inkex.EffectExtension):
         mark_enabled = len(mark_raw) > 0
         mark_polygons = []
         if mark_enabled:
-            # Convert to mm with Y flip (so mark reads correctly from below)
+            # Convert to mm.  Negate X so the mark reads correctly
+            # when viewed from below (flipping the mug swaps left/right).
+            # Negate Y to convert from SVG (Y-down) to OpenSCAD (Y-up).
             mark_mm = []
             for poly in mark_raw:
                 converted = [
-                    (to_mm(p[0] * scale, doc_units),
+                    (-to_mm(p[0] * scale, doc_units),
                      -to_mm(p[1] * scale, doc_units))
                     for p in poly
                 ]
@@ -326,18 +326,6 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 [(p[0] * clay_scale, p[1] * clay_scale) for p in poly]
                 for poly in mark_polygons
             ]
-
-        # Compute draft-offset polygons and hole flags for mark
-        import math as _math
-        mark_polygons_draft = []
-        mark_polygon_is_hole = []
-        if mark_enabled:
-            draft_offset = (self.options.mark_depth
-                            * _math.tan(_math.radians(self.options.mark_draft_angle)))
-            mark_polygons_draft = [
-                offset_polygon(poly, draft_offset) for poly in mark_polygons
-            ]
-            mark_polygon_is_hole = compute_polygon_holes(mark_polygons)
 
         # Detect foot concavity for mould type
         concavity = mug_surface.detect_foot_concavity()
@@ -365,8 +353,6 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "handle_stations": scaled_handle_stations,
             "handle_path": scaled_handle_path,
             "mark_polygons": mark_polygons if mark_enabled else None,
-            "mark_polygons_draft": mark_polygons_draft if mark_enabled else None,
-            "mark_polygon_is_hole": mark_polygon_is_hole if mark_enabled else None,
             "mug_params": {
                 "fn": self.options.fn,
                 "fa": self.options.fa,
@@ -378,6 +364,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "mark_depth": self.options.mark_depth,
                 "mark_inset": self.options.mark_inset,
                 "mark_draft_angle": self.options.mark_draft_angle,
+                "mark_layer_height": self.options.mark_layer_height,
                 **mould_params,
             },
         }

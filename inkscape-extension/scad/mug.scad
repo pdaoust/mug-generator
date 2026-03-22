@@ -69,25 +69,27 @@ module handle() {
 
 mug_min_z = min([for (p = mug_outer_profile) p[1]]);
 
-_mark_eps = 0.001;
+// Z of the mug base centre (where the profile meets the Z axis
+// at the bottom — above mug_min_z for mugs with a foot ring).
+_mark_z = mug_outer_profile[0][1];
 
-module _mark_skin(i, z_lo, z_hi) {
-    skin([
-        [for (p = mark_polygons[i]) [p[0], p[1], z_lo]],
-        [for (p = mark_polygons_draft[i]) [p[0], p[1], z_hi]]
-    ], slices = 0, caps = true, method = "direct");
-}
+_mark_draft = mark_depth * tan(mark_draft_angle);
+_mark_half_draft = _mark_draft / 2;
+_mark_slices = mark_draft_angle > 0
+    ? max(2, round(mark_depth / mark_layer_height))
+    : 1;
 
 module mark_stamp() {
-    if (len(mark_polygons) > 0)
-        difference() {
-            for (i = [0:len(mark_polygons) - 1])
-                if (!mark_polygon_is_hole[i])
-                    _mark_skin(i, 0, mark_depth);
-            for (i = [0:len(mark_polygons) - 1])
-                if (mark_polygon_is_hole[i])
-                    _mark_skin(i, -_mark_eps, mark_depth + _mark_eps);
+    if (len(mark_points) > 0) {
+        _dz = mark_depth / _mark_slices;
+        for (i = [0:_mark_slices - 1]) {
+            _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
+            translate([0, 0, i * _dz])
+                linear_extrude(height = _dz + 0.001)
+                    offset(r = _r)
+                        polygon(points = mark_points, paths = mark_paths);
         }
+    }
 }
 
 // --- Assembly ---
@@ -97,14 +99,15 @@ module mug_assembly() {
         if (mark_enabled && mark_inset) {
             difference() {
                 mug_body();
-                translate([0, 0, mug_min_z])
-                    mark_stamp();
+                translate([0, 0, _mark_z - 0.01])
+                    render() mark_stamp();
             }
         } else if (mark_enabled && !mark_inset) {
             union() {
                 mug_body();
-                translate([0, 0, mug_min_z - mark_depth])
-                    mark_stamp();
+                translate([0, 0, _mark_z + 0.01])
+                    mirror([0, 0, 1])
+                        mark_stamp();
             }
         } else {
             mug_body();

@@ -74,6 +74,9 @@ are supported.
       <param name="fs" type="float" min="0.01" max="100" precision="2"
              gui-text="Min size (mm)"
              gui-description="Minimum segment length in mm (same as OpenSCAD's $fs variable)">2.0</param>
+      <param name="mark_layer_height" type="float" min="0.05" max="1.0" precision="2"
+             gui-text="Layer height (mm)"
+             gui-description="Height of your 3D printer's layer settings. This gets used in the maker's mark, which is composed of successively larger extruded slices stacked on top of each other to simulate a bevel. Smaller values give smoother sides but slower renders.">0.20</param>
 
       <separator />
       <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>

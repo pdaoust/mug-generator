@@ -442,7 +442,10 @@ def _split_subpath_d(d: str) -> list[str]:
             prev_start = _extract_start(current_chunk)
             chunks.append(current_chunk)
             current_chunk = []
-            # Convert relative 'm' to absolute 'M' using previous start
+            # Convert relative 'm' to absolute 'M' using previous start.
+            # Insert an explicit 'l' so that any implicit coordinate pairs
+            # after the first one are still treated as relative lineto
+            # (SVG spec: implicit pairs after 'm' are 'l', not 'L').
             if tok == 'm' and prev_start is not None:
                 current_chunk.append('M')
                 i += 1
@@ -453,6 +456,8 @@ def _split_subpath_d(d: str) -> list[str]:
                     current_chunk.append(str(x))
                     current_chunk.append(str(y))
                     i += 2
+                    # Any following implicit coords are relative lineto
+                    current_chunk.append('l')
                 continue
             else:
                 current_chunk.append(tok)
@@ -621,9 +626,16 @@ def offset_polygon(
 
         bx /= bl
         by /= bl
-        cos_half = max(bx * ne[0] + by * ne[1], 0.25)  # clamp spikes
-        d = eff / cos_half
+        cos_half = bx * ne[0] + by * ne[1]
 
+        # Miter limit: if the miter would extend more than 2× delta,
+        # fall back to a simple normal offset (no miter).  This
+        # prevents spikes at sharp corners in converted text.
+        if cos_half < 0.5:
+            result.append((p_curr[0] + eff * ne[0], p_curr[1] + eff * ne[1]))
+            continue
+
+        d = eff / cos_half
         result.append((p_curr[0] + d * bx, p_curr[1] + d * by))
 
     return result

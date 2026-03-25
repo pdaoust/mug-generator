@@ -28,9 +28,10 @@ from lib.mug_surface import MugSurface
 from lib.openscad_params import compute_n
 from lib.rail_sampler import sample_rails
 from lib.side_rail_extender import apply_side_rails
-from lib.profile_transformer import generate_handle_stations
+from lib.profile_transformer import generate_handle_stations, normalize_profile
 from lib.scad_writer import run_all_emitters
 from lib.preview import draw_preview
+from lib.handle_nudge import nudge_handle_stations
 
 
 class MugGeneratorEffect(inkex.EffectExtension):
@@ -251,6 +252,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 mug_axis_x=mug_surface.axis_x,
                 mug_radius_at_z=mug_true_radius_at_z,
             )
+
         else:
             # Re-parse mug body with bezier subdivision even without handle
             import math
@@ -271,30 +273,33 @@ class MugGeneratorEffect(inkex.EffectExtension):
             mug_outer_mm = svg_to_mm(mug_body_paths[0])
             mug_inner_mm = svg_to_mm(mug_body_paths[1])
 
-        # Clay shrinkage compensation: enlarge the model so the fired
-        # piece matches the drawn size.
         shrinkage_pct = self.options.clay_shrinkage
-        clay_scale = 100.0 / (100.0 - shrinkage_pct) if shrinkage_pct > 0 else 1.0
 
         # Build mug profiles for OpenSCAD — raw polygon vertices in path
         # order (not z-sorted).  X = radius from the document origin (mug axis).
-        # All mug geometry is scaled by the clay shrinkage factor.
-        scad_outer_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_outer_mm]
-        scad_inner_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_inner_mm]
+        # Data is emitted at actual (fired) size; clay shrinkage scaling
+        # is applied in the mould/funnel SCAD files.
+        scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
+        scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
         if handle_enabled:
-            scaled_handle_stations = [
-                [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
-                 for pt in poly]
+            handle_stations_out = [
+                [[pt[0], pt[1], pt[2]] for pt in poly]
                 for poly in handle_stations_3d
             ]
-            scaled_handle_path = [
-                [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
-                 s.centroid[2] * clay_scale]
+            norm_profile = normalize_profile(handle_profile)
+            handle_stations_out = nudge_handle_stations(
+                handle_stations_out, scad_outer_profile,
+                axis_x=mug_surface.axis_x,
+                station_frames=stations,
+                norm_profile=norm_profile,
+            )
+            handle_path_out = [
+                [s.centroid[0], s.centroid[1], s.centroid[2]]
                 for s in stations
             ]
         else:
-            scaled_handle_stations = []
-            scaled_handle_path = []
+            handle_stations_out = []
+            handle_path_out = []
 
         # Extract maker's mark (optional layer)
         mark_raw = get_layer_mark_polygons(svg, "mark")
@@ -321,11 +326,6 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 [(p[0] - cx, p[1] - cy) for p in poly]
                 for poly in mark_mm
             ]
-            # Apply clay shrinkage scaling
-            mark_polygons = [
-                [(p[0] * clay_scale, p[1] * clay_scale) for p in poly]
-                for poly in mark_polygons
-            ]
 
         # Detect foot concavity for mould type
         concavity = mug_surface.detect_foot_concavity()
@@ -341,8 +341,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
         }
         if concavity:
             mould_params["mould_type"] = 3
-            mould_params["foot_concavity_z"] = concavity[0] * clay_scale
-            mould_params["foot_concavity_radius"] = concavity[1] * clay_scale
+            mould_params["foot_concavity_z"] = concavity[0]
+            mould_params["foot_concavity_radius"] = concavity[1]
         else:
             mould_params["mould_type"] = 2
 
@@ -350,14 +350,14 @@ class MugGeneratorEffect(inkex.EffectExtension):
         data = {
             "mug_outer_profile": scad_outer_profile,
             "mug_inner_profile": scad_inner_profile,
-            "handle_stations": scaled_handle_stations,
-            "handle_path": scaled_handle_path,
+            "handle_stations": handle_stations_out,
+            "handle_path": handle_path_out,
             "mark_polygons": mark_polygons if mark_enabled else None,
             "mug_params": {
                 "fn": self.options.fn,
                 "fa": self.options.fa,
                 "fs": self.options.fs,
-                "axis_x": mug_surface.axis_x * clay_scale,
+                "axis_x": mug_surface.axis_x,
                 "clay_shrinkage_pct": shrinkage_pct,
                 "handle_enabled": handle_enabled,
                 "mark_enabled": mark_enabled,
@@ -382,7 +382,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
             if handle_enabled:
                 side_rail_paths = layers["handle side rails"]
                 side_rail_svg = [(p[0] * scale, p[1] * scale) for p in side_rail_paths[0]]
-            draw_preview(svg, mug_outer_svg, stations, handle_stations_3d,
+            # Use nudged stations for preview so it shows the final geometry
+            preview_stations = handle_stations_out if handle_enabled else handle_stations_3d
+            draw_preview(svg, mug_outer_svg, stations, preview_stations,
                          side_rail_svg, vb_bottom,
                          funnel_outline_mm=funnel_outline_mm)
 

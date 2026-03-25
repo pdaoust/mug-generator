@@ -12,8 +12,9 @@ from lib.mug_surface import MugSurface
 from lib.openscad_params import compute_n
 from lib.rail_sampler import sample_rails, _cumulative_chord_lengths, _build_midpoint_curve
 from lib.side_rail_extender import apply_side_rails
-from lib.profile_transformer import generate_handle_stations
+from lib.profile_transformer import generate_handle_stations, normalize_profile
 from lib.scad_writer import run_all_emitters
+from lib.handle_nudge import nudge_handle_stations
 
 
 FIXTURE_SVG = Path(__file__).parent / "fixtures" / "sample.svg"
@@ -110,6 +111,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             mug_axis_x=mug_surface.axis_x,
             mug_radius_at_z=mug_true_radius_at_z,
         )
+
     else:
         import math
         from lib.units import to_mm as _to_mm
@@ -128,12 +130,10 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         mug_outer_mm = svg_to_mm(mug_body_paths[0])
         mug_inner_mm = svg_to_mm(mug_body_paths[1])
 
-    # Clay shrinkage compensation
-    clay_scale = 100.0 / (100.0 - clay_shrinkage) if clay_shrinkage > 0 else 1.0
-
-    # Raw polygon vertices in path order — X = radius from document origin
-    scad_outer_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_outer_mm]
-    scad_inner_profile = [[p[0] * clay_scale, p[1] * clay_scale] for p in mug_inner_mm]
+    # Raw polygon vertices in path order — X = radius from document origin.
+    # Data is at actual (fired) size; clay shrinkage scaling is in the SCAD files.
+    scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
+    scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
 
     # Extract maker's mark (optional layer)
     mark_raw = get_layer_mark_polygons(svg_root, "mark")
@@ -153,7 +153,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         cx = (min(all_x) + max(all_x)) / 2
         cy = (min(all_y) + max(all_y)) / 2
         mark_polygons = [
-            [((p[0] - cx) * clay_scale, (p[1] - cy) * clay_scale) for p in poly]
+            [(p[0] - cx, p[1] - cy) for p in poly]
             for poly in mark_mm
         ]
 
@@ -176,37 +176,42 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     }
     if concavity:
         mould_params["mould_type"] = 3
-        mould_params["foot_concavity_z"] = concavity[0] * clay_scale
-        mould_params["foot_concavity_radius"] = concavity[1] * clay_scale
+        mould_params["foot_concavity_z"] = concavity[0]
+        mould_params["foot_concavity_radius"] = concavity[1]
     else:
         mould_params["mould_type"] = 2
 
     if handle_enabled:
-        scaled_handle_stations = [
-            [[pt[0] * clay_scale, pt[1] * clay_scale, pt[2] * clay_scale]
-             for pt in poly]
+        handle_stations_out = [
+            [[pt[0], pt[1], pt[2]] for pt in poly]
             for poly in handle_stations_3d
         ]
-        scaled_handle_path = [
-            [s.centroid[0] * clay_scale, s.centroid[1] * clay_scale,
-             s.centroid[2] * clay_scale]
+        norm_profile = normalize_profile(handle_profile)
+        handle_stations_out = nudge_handle_stations(
+            handle_stations_out, scad_outer_profile,
+            axis_x=mug_surface.axis_x,
+            station_frames=stations,
+            norm_profile=norm_profile,
+        )
+        handle_path_out = [
+            [s.centroid[0], s.centroid[1], s.centroid[2]]
             for s in stations
         ]
     else:
-        scaled_handle_stations = []
-        scaled_handle_path = []
+        handle_stations_out = []
+        handle_path_out = []
 
     data = {
         "mug_outer_profile": scad_outer_profile,
         "mug_inner_profile": scad_inner_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
-        "handle_stations": scaled_handle_stations,
-        "handle_path": scaled_handle_path,
+        "handle_stations": handle_stations_out,
+        "handle_path": handle_path_out,
         "mug_params": {
             "fn": fn,
             "fa": fa,
             "fs": fs,
-            "axis_x": mug_surface.axis_x * clay_scale,
+            "axis_x": mug_surface.axis_x,
             "clay_shrinkage_pct": clay_shrinkage,
             "handle_enabled": handle_enabled,
             **mould_params,
@@ -302,17 +307,17 @@ class TestIntegration:
         assert len(data["handle_stations"]) >= 5
 
     def test_clay_shrinkage(self, tmp_path):
-        """Test clay shrinkage scales all mug geometry."""
+        """Emitted data is at actual size; clay_shrinkage_pct is a param for SCAD."""
         data_no = _run_pipeline(FIXTURE_SVG, tmp_path / "no_shrink", fn=20,
                                 clay_shrinkage=0.0)
         data_10 = _run_pipeline(FIXTURE_SVG, tmp_path / "shrink_10", fn=20,
                                 clay_shrinkage=10.0)
 
-        scale = 100.0 / 90.0
+        # Profile data should be identical (actual size, not pre-scaled)
         for p0, p10 in zip(data_no["mug_outer_profile"],
                            data_10["mug_outer_profile"]):
-            assert p10[0] == pytest.approx(p0[0] * scale, abs=1e-4)
-            assert p10[1] == pytest.approx(p0[1] * scale, abs=1e-4)
+            assert p10[0] == pytest.approx(p0[0], abs=1e-6)
+            assert p10[1] == pytest.approx(p0[1], abs=1e-6)
 
         text = (tmp_path / "shrink_10" / "mug_params.scad").read_text()
         assert "clay_shrinkage_pct = 10.0" in text
@@ -390,3 +395,11 @@ class TestIntegration:
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         text = (tmp_path / "mug_params.scad").read_text()
         assert "handle_enabled = true" in text
+
+    def test_handle_snap_to_mug_in_scad(self, tmp_path):
+        """Static SCAD files contain snap_to_mug for handle attachment."""
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        mug_text = (tmp_path / "mug.scad").read_text()
+        assert "snap_to_mug" in mug_text
+        mould_text = (tmp_path / "mould.scad").read_text()
+        assert "snap_to_mug" in mould_text

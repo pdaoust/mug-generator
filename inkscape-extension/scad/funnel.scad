@@ -24,16 +24,27 @@ cone_height = 50;           // Cone height above mould (mm)
 funnel_clearance = 0.5;     // Gap between neck and pouring hole (mm)
 
 // =====================================================================
+// CLAY SHRINKAGE SCALING
+// =====================================================================
+// Data files contain actual (fired) dimensions.  The funnel must match
+// the mould, so mug geometry is scaled for clay shrinkage.
+
+_cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
+
+_inner = [for (p = mug_inner_profile) p * _cs];
+_outer = [for (p = mug_outer_profile) p * _cs];
+
+// =====================================================================
 // DERIVED VALUES
 // =====================================================================
 
-inner_top_z = max([for (p = mug_inner_profile) p[1]]);
+inner_top_z = max([for (p = _inner) p[1]]);
 
 // Interpolate inner profile radius at a given Z.
 // Returns the maximum radius found at that Z.
 function inner_r_at_z(z) =
     let(
-        prof = mug_inner_profile, n = len(prof),
+        prof = _inner, n = len(prof),
         results = [for (i = [0:n-1])
             let(j = (i + 1) % n,
                 z0 = prof[i][1], z1 = prof[j][1],
@@ -48,7 +59,7 @@ pour_hole_r = inner_r_at_z(inner_top_z);
 cone_top_r = pour_hole_r + cone_height * tan(funnel_wall_angle);
 
 // lip_top_z: highest Z of the outer body profile
-lip_top_z = max([for (p = mug_outer_profile) p[1]]);
+lip_top_z = max([for (p = _outer) p[1]]);
 
 // Vertical-tangent detection: walk the inner profile downward from
 // lip_top_z.  The rim area narrows; at some point the bowl widens again.
@@ -65,7 +76,7 @@ function _sort_by_z_desc(pts) =
     )
     concat(_sort_by_z_desc(higher), equal, _sort_by_z_desc(lower));
 
-_inner_below_lip = [for (p = mug_inner_profile)
+_inner_below_lip = [for (p = _inner)
     if (p[1] < lip_top_z - 0.01) p];
 
 _inner_sorted = _sort_by_z_desc(_inner_below_lip);
@@ -88,11 +99,11 @@ neck_r = pour_hole_r - funnel_clearance;
 // MUG INNER SOLID (duplicated from mould.scad to avoid use<> scoping)
 // =====================================================================
 
-_n_inner = len(mug_inner_profile);
+_n_inner = len(_inner);
 _solid_inner_profile = concat(
-    mug_inner_profile,
-    [[0, mug_inner_profile[_n_inner - 1][1]],
-     [0, mug_inner_profile[0][1]]]
+    _inner,
+    [[0, _inner[_n_inner - 1][1]],
+     [0, _inner[0][1]]]
 );
 
 module mug_inner_solid() {

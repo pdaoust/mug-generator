@@ -38,26 +38,56 @@ module mug_body() {
 }
 
 // --- Handle (lofted skin with endcaps) ---
-// Extra sunken stations at each end push 1 mm radially inward so the
-// handle plugs into the mug wall for a clean boolean overlap.
+// Extra stations at each end are snapped to the mug surface so the
+// handle plugs cleanly into the body for the boolean union.
 // caps=true lets BOSL2 triangulate and close the ends internally,
 // ensuring proper vertex sharing between skin walls and endcaps.
 
-function nudge_radial(pts, axis_x, amount) =
-    [for(p = pts)
-        let(
-            dx = p[0] - axis_x,
-            dy = p[1],
-            r = norm([dx, dy]),
-            scale = r > 0.001 ? (r + amount) / r : 1
-        )
-        [axis_x + dx * scale, dy * scale, p[2]]
+// Interpolate mug outer radius at height z from the profile polygon.
+function mug_r_at_z(z) =
+    let(
+        prof = mug_outer_profile, n = len(prof),
+        results = [for (i = [0:n-1])
+            let(j = (i + 1) % n,
+                z0 = prof[i][1], z1 = prof[j][1],
+                zlo = min(z0, z1), zhi = max(z0, z1))
+            if (zlo <= z && z <= zhi && abs(zhi - zlo) > 1e-9)
+                let(t = (z - z0) / (z1 - z0))
+                prof[i][0] + t * (prof[j][0] - prof[i][0])
+        ]
+    ) len(results) > 0 ? max(results) : prof[0][0];
+
+// Centroid of a cross-section (list of 3D points).
+function _centroid(pts) =
+    let(n = len(pts))
+    [for (j = [0:2]) let(s = [for (p = pts) p[j]]) s * [for (_ = s) 1] / n];
+
+// Snap entire cross-section inside the mug surface (for end-caps).
+// Translates the whole station uniformly based on centroid position.
+function snap_to_mug(pts, axis_x, overshoot = 0.5) =
+    let(
+        c = _centroid(pts),
+        dx = c[0] - axis_x,
+        dy = c[1],
+        r = norm([dx, dy]),
+        mug_r = mug_r_at_z(c[2]),
+        target_r = mug_r - overshoot,
+        shift = r > 0.001 ? max(0, r - target_r) : 0,
+        dir_x = r > 0.001 ? dx / r : 1,
+        dir_y = r > 0.001 ? dy / r : 0
+    )
+    [for (p = pts)
+        [p[0] - shift * dir_x, p[1] - shift * dir_y, p[2]]
     ];
 
+// Handle stations arrive pre-nudged from Python.
+// Extra end-cap stations are snapped inside the mug surface for a
+// clean boolean union.
+_n_hs = len(handle_stations);
 handle_stations_extended = handle_enabled ? concat(
-    [nudge_radial(handle_stations[0], mug_axis_x, -1)],
+    [snap_to_mug(handle_stations[0], mug_axis_x)],
     handle_stations,
-    [nudge_radial(handle_stations[len(handle_stations)-1], mug_axis_x, -1)]
+    [snap_to_mug(handle_stations[_n_hs-1], mug_axis_x)]
 ) : [];
 
 module handle() {

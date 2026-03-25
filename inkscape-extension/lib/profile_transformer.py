@@ -161,9 +161,12 @@ def transform_profile_blended(
         # Sagitta correction for the tangential component of the width offset.
         # Only the part of the offset that's tangential to the cylinder needs
         # curvature correction (pushing inward).
+        # Use the centroid's actual radial distance (to_len) rather than
+        # the mug profile radius — on concave bodies mug_radius changes
+        # sharply near the equator, causing jagged cross-section transitions.
         su_tan = su * (wd_x * tangent[0] + wd_y * tangent[1])
-        if mug_radius > 1e-9:
-            sagitta = mug_radius * (1.0 - math.cos(su_tan / mug_radius))
+        if to_len > 1e-9:
+            sagitta = to_len * (1.0 - math.cos(su_tan / to_len))
         else:
             sagitta = 0.0
 

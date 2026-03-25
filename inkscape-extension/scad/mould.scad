@@ -22,16 +22,35 @@ render_part = "all";   // "all", "half_a", "half_b", "base"
 explode_gap = 20;
 
 // =====================================================================
+// CLAY SHRINKAGE SCALING
+// =====================================================================
+// Data files contain actual (fired) dimensions.  The mould needs
+// pre-shrinkage (greenware) dimensions so the fired piece comes out
+// the right size.  Mould construction parameters (plaster_thickness,
+// wall_thickness, natch_radius, etc.) are NOT scaled.
+
+_cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
+
+_outer = [for (p = mug_outer_profile) p * _cs];
+_inner = [for (p = mug_inner_profile) p * _cs];
+_hstations = handle_enabled
+    ? [for (s = handle_stations) [for (p = s) p * _cs]]
+    : [];
+_mpoints = [for (p = mark_points) p * _cs];
+_axis = mug_axis_x * _cs;
+_mark_depth = mark_depth * _cs;
+
+// =====================================================================
 // DERIVED VALUES
 // =====================================================================
 
-mug_max_radius = max([for (p = mug_outer_profile) p[0]]);
-mug_max_z = max([for (p = mug_outer_profile) p[1]]);
-mug_min_z = min([for (p = mug_outer_profile) p[1]]);
+mug_max_radius = max([for (p = _outer) p[0]]);
+mug_max_z = max([for (p = _outer) p[1]]);
+mug_min_z = min([for (p = _outer) p[1]]);
 
-inner_top_z = max([for (p = mug_inner_profile) p[1]]);
+inner_top_z = max([for (p = _inner) p[1]]);
 handle_max_y = handle_enabled
-    ? max([for (s = handle_stations) for (p = s) abs(p[1])])
+    ? max([for (s = _hstations) for (p = s) abs(p[1])])
     : 0;
 mould_y_half = max(mug_max_radius, handle_max_y) + plaster_thickness;
 
@@ -40,16 +59,16 @@ mould_y_half = max(mug_max_radius, handle_max_y) + plaster_thickness;
 // =====================================================================
 
 module mug_outer() {
-    rotate_extrude() polygon(points = mug_outer_profile);
+    rotate_extrude() polygon(points = _outer);
 }
 
 // Solid mug outer: polygon extended to the Z axis for a completely
 // filled body of revolution (no hollow centre).
-_n_outer = len(mug_outer_profile);
+_n_outer = len(_outer);
 _solid_outer_profile = concat(
-    mug_outer_profile,
-    [[0, mug_outer_profile[_n_outer - 1][1]],
-     [0, mug_outer_profile[0][1]]]
+    _outer,
+    [[0, _outer[_n_outer - 1][1]],
+     [0, _outer[0][1]]]
 );
 
 // --- Maker's mark stamp ---
@@ -62,24 +81,24 @@ _solid_outer_profile = concat(
 // This robustly handles self-intersection: tiny features simply
 // collapse at higher insets instead of blowing up.
 
-_mark_draft = mark_depth * tan(mark_draft_angle);
+_mark_draft = _mark_depth * tan(mark_draft_angle);
 _mark_half_draft = _mark_draft / 2;
 _mark_slices = mark_draft_angle > 0
-    ? max(2, round(mark_depth / mark_layer_height))
+    ? max(2, round(_mark_depth / mark_layer_height))
     : 1;
 
-// z=0 is the mug-surface end (expanded), z=mark_depth is the
+// z=0 is the mug-surface end (expanded), z=_mark_depth is the
 // deep/tip end (shrunk).  Callers position and mirror as needed.
 module mark_stamp() {
-    if (len(mark_points) > 0) {
-        _dz = mark_depth / _mark_slices;
+    if (len(_mpoints) > 0) {
+        _dz = _mark_depth / _mark_slices;
         for (i = [0:_mark_slices - 1]) {
-            // +half_draft at z=0, 0 at midpoint, -half_draft at z=mark_depth
+            // +half_draft at z=0, 0 at midpoint, -half_draft at z=_mark_depth
             _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
             translate([0, 0, i * _dz])
                 linear_extrude(height = _dz + 0.001)
                     offset(r = _r)
-                        polygon(points = mark_points, paths = mark_paths);
+                        polygon(points = _mpoints, paths = mark_paths);
         }
     }
 }
@@ -91,7 +110,7 @@ module _mug_outer_solid_raw() {
 // Z of the mug base centre — where the profile meets the Z axis
 // at the bottom.  This is above mug_min_z for mugs with a foot ring
 // (mug_min_z is the foot, _mark_z is the recessed base inside it).
-_mark_z = mug_outer_profile[0][1];
+_mark_z = _outer[0][1];
 
 module mug_outer_solid() {
     if (mark_enabled && mark_inset) {
@@ -121,11 +140,11 @@ module mug_outer_solid() {
 // The inner profile is drawn in the SVG to include the filler tube
 // (a vertical extension above the mug rim), so the revolved solid
 // naturally forms the pour tube with identical faceting.
-_n_inner = len(mug_inner_profile);
+_n_inner = len(_inner);
 _solid_inner_profile = concat(
-    mug_inner_profile,
-    [[0, mug_inner_profile[_n_inner - 1][1]],
-     [0, mug_inner_profile[0][1]]]
+    _inner,
+    [[0, _inner[_n_inner - 1][1]],
+     [0, _inner[0][1]]]
 );
 
 module mug_inner_solid() {
@@ -137,21 +156,40 @@ module mug_body() {
 }
 
 module mug_inner() {
-    rotate_extrude() polygon(points = mug_inner_profile);
+    rotate_extrude() polygon(points = _inner);
 }
 
-function nudge_radial(pts, axis_x, amount) =
+// Centroid of a cross-section (list of 3D points).
+function _centroid(pts) =
+    let(n = len(pts))
+    [for (j = [0:2]) let(s = [for (p = pts) p[j]]) s * [for (_ = s) 1] / n];
+
+// Snap entire cross-section inside the mug surface (for end-caps).
+// Translates the whole station uniformly based on centroid position.
+function snap_to_mug(pts, axis_x, overshoot = 0.5) =
+    let(
+        c = _centroid(pts),
+        dx = c[0] - axis_x,
+        dy = c[1],
+        r = norm([dx, dy]),
+        mug_r = mug_r_at_z(c[2]),
+        target_r = mug_r - overshoot,
+        shift = r > 0.001 ? max(0, r - target_r) : 0,
+        dir_x = r > 0.001 ? dx / r : 1,
+        dir_y = r > 0.001 ? dy / r : 0
+    )
     [for (p = pts)
-        let(dx = p[0] - axis_x, dy = p[1],
-            r = norm([dx, dy]),
-            s = r > 0.001 ? (r + amount) / r : 1)
-        [axis_x + dx * s, dy * s, p[2]]
+        [p[0] - shift * dir_x, p[1] - shift * dir_y, p[2]]
     ];
 
+// Handle stations arrive pre-nudged from Python.
+// Extra end-cap stations are snapped inside the mug surface for a
+// clean boolean union.
+_n_hs = len(_hstations);
 handle_stations_extended = handle_enabled ? concat(
-    [nudge_radial(handle_stations[0], mug_axis_x, -1)],
-    handle_stations,
-    [nudge_radial(handle_stations[len(handle_stations)-1], mug_axis_x, -1)]
+    [snap_to_mug(_hstations[0], _axis)],
+    _hstations,
+    [snap_to_mug(_hstations[_n_hs-1], _axis)]
 ) : [];
 
 module handle() {
@@ -168,7 +206,7 @@ module mug_positive() {
 
 // Centroid of outermost handle points (max X per station) —
 // approximates the outer handle rail for natch placement.
-_outer_handle_pts = handle_enabled ? [for (s = handle_stations)
+_outer_handle_pts = handle_enabled ? [for (s = _hstations)
     let(xs = [for (p = s) p[0]],
         mx = max(xs),
         candidates = [for (p = s) if (abs(p[0] - mx) < 0.01) p])
@@ -185,7 +223,7 @@ handle_outer_centroid = _n_ohp > 0
 // Returns the maximum radius found at that Z (handles multi-segment hits).
 function mug_r_at_z(z) =
     let(
-        prof = mug_outer_profile, n = len(prof),
+        prof = _outer, n = len(prof),
         results = [for (i = [0:n-1])
             let(j = (i + 1) % n,
                 z0 = prof[i][1], z1 = prof[j][1],
@@ -196,20 +234,20 @@ function mug_r_at_z(z) =
         ]
     ) len(results) > 0 ? max(results) : prof[0][0];
 
-_foot_z = (is_undef(foot_concavity_z) ? 0 : foot_concavity_z)
-        + (mark_enabled && mark_inset ? mark_depth : 0);
+_foot_z = (is_undef(foot_concavity_z) ? 0 : foot_concavity_z * _cs)
+        + (mark_enabled && mark_inset ? _mark_depth : 0);
 
 // Handle rail projections onto the XZ plane (2D mould coordinates:
 // X = 3D X, Y = 3D Z).  Inner = closest to mug (min X per station),
 // outer = farthest from mug (max X per station).
-_handle_inner_2d = handle_enabled ? [for (s = handle_stations)
+_handle_inner_2d = handle_enabled ? [for (s = _hstations)
     let(xs = [for (p = s) p[0]],
         mn = min(xs),
         pts = [for (p = s) if (abs(p[0] - mn) < 0.01) p])
     [pts[0][0], pts[0][2]]
 ] : [];
 
-_handle_outer_2d = handle_enabled ? [for (s = handle_stations)
+_handle_outer_2d = handle_enabled ? [for (s = _hstations)
     let(xs = [for (p = s) p[0]],
         mx = max(xs),
         pts = [for (p = s) if (abs(p[0] - mx) < 0.01) p])
@@ -234,10 +272,10 @@ module mould_hull_2d() {
         union() {
             // 1. Mug body (outer + inner profiles) with full plaster
             offset(r = plaster_thickness) {
-                polygon(points = mug_outer_profile);
-                mirror([1, 0]) polygon(points = mug_outer_profile);
-                polygon(points = mug_inner_profile);
-                mirror([1, 0]) polygon(points = mug_inner_profile);
+                polygon(points = _outer);
+                mirror([1, 0]) polygon(points = _outer);
+                polygon(points = _inner);
+                mirror([1, 0]) polygon(points = _inner);
             }
 
             if (handle_enabled) {
@@ -247,10 +285,10 @@ module mould_hull_2d() {
             }
 
             // 3. Fill gap between mug and handle (no offset)
-            polygon(points = mug_outer_profile);
-            mirror([1, 0]) polygon(points = mug_outer_profile);
-            polygon(points = mug_inner_profile);
-            mirror([1, 0]) polygon(points = mug_inner_profile);
+            polygon(points = _outer);
+            mirror([1, 0]) polygon(points = _outer);
+            polygon(points = _inner);
+            mirror([1, 0]) polygon(points = _inner);
             if (handle_enabled)
                 polygon(points = _handle_outer_2d);
         }
@@ -449,7 +487,7 @@ module case_upper_half(pos_y) {
 // The offset(r=plaster_thickness) circle around each profile point
 // extends horizontally at the seam plane by sqrt(pt² - dz²), where
 // dz is the vertical distance from that point to _foot_z.
-_base_x_half = max([for (p = mug_outer_profile)
+_base_x_half = max([for (p = _outer)
     let(dz = p[1] - _foot_z)
     if (abs(dz) <= plaster_thickness)
         p[0] + sqrt(plaster_thickness * plaster_thickness - dz * dz)

@@ -19,6 +19,7 @@ PREVIEW_LABEL = "_preview"
 PREVIEW_STYLE = "fill:magenta;fill-opacity:0.3;stroke:magenta;stroke-width:0.5;stroke-opacity:0.6"
 SIDE_RAIL_STYLE = "fill:green;fill-opacity:0.3;stroke:green;stroke-width:0.5;stroke-opacity:0.6"
 INDICATOR_STYLE = "fill:none;stroke:red;stroke-width:1;stroke-opacity:0.8"
+STATION_STYLE = "fill:none;stroke:red;stroke-width:0.3;stroke-opacity:0.4"
 FUNNEL_STYLE = "fill:dodgerblue;fill-opacity:0.3;stroke:dodgerblue;stroke-width:0.5;stroke-opacity:0.6"
 
 
@@ -113,11 +114,28 @@ def draw_preview(
 
     # Handle footprint: project 3D cross-sections to XZ plane (SVG X, Z→SVG Y)
     if handle_stations_3d:
+        # Endpoint stations (bold)
         for poly_3d in [handle_stations_3d[0], handle_stations_3d[-1]]:
             pts_2d = [(p[0], vb_bottom - p[2]) for p in poly_3d]
             d = _points_to_path_d(pts_2d)
             if d:
                 _add_path(layer, d, INDICATOR_STYLE)
+
+        # Intermediate stations (light), evenly spaced, up to 20 total
+        n_total = len(handle_stations_3d)
+        max_preview = 20
+        if n_total > 2:
+            step = max(1, (n_total - 1) // min(max_preview - 1, n_total - 1))
+            indices = set(range(0, n_total, step))
+            indices.add(n_total - 1)
+            indices.discard(0)
+            indices.discard(n_total - 1)  # endpoints already drawn bold
+            for idx in sorted(indices):
+                poly_3d = handle_stations_3d[idx]
+                pts_2d = [(p[0], vb_bottom - p[2]) for p in poly_3d]
+                d = _points_to_path_d(pts_2d)
+                if d:
+                    _add_path(layer, d, STATION_STYLE)
 
         # Draw handle path (centroids)
         if stations:

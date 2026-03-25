@@ -2,7 +2,7 @@
 
 Uses a hyperbolic paraboloid (hypar) interpolation so that:
 - Inner/outer rails (v = ±0.5) stay exactly where the artist placed them
-- Side rail endpoints (u = ±0.5) are stretched onto the mug surface
+- Side rail points are conformed onto the mug surface
 - Intermediate profile points blend smoothly between these constraints
 - Corrections decay to zero at the handle midpoint (two separate blends)
 """
@@ -37,33 +37,42 @@ def _mug_r_at_z(profile: list[list[float]], z: float) -> float:
 
 
 def _side_rail_excess(
-    frame: "Station",
+    station: list[list[float]],
+    norm_profile: list[tuple[float, float]],
     outer_profile: list[list[float]],
     axis_x: float,
-) -> tuple[float, float]:
-    """Compute radial excess for left/right side rail midpoints.
+) -> float:
+    """Compute radial excess at the side rail midline (v ≈ 0) of a station.
 
-    Returns (excess_left, excess_right) where positive means the point
-    is outside the mug surface and negative means inside.
+    Finds the profile points closest to v=0 (the side rail midline,
+    which sticks out furthest in Y), computes each one's radial distance
+    from the mug axis vs the mug surface radius at that Z height, and
+    returns the average excess.  Positive = outside the mug surface.
     """
-    cx, cy, cz = frame.centroid
-    z_axis = frame.z_axis
-    sz = frame.sz
+    # Collect points near v=0 (side rail midline).  Use all points
+    # with |v| < 0.1 to get a robust average, falling back to the
+    # single closest point if the profile has no points that close.
+    candidates: list[tuple[float, int]] = []
+    for j, (u, v) in enumerate(norm_profile):
+        candidates.append((abs(v), j))
+    candidates.sort()
 
-    results: list[float] = []
-    for sign in (-0.5, 0.5):  # u = -0.5 (left), u = +0.5 (right)
-        # Side rail midpoint in 3D (v=0 → no x_axis component)
-        px = cx + sign * sz * z_axis[0]
-        py = cy + sign * sz * z_axis[1]
-        pz = cz + sign * sz * z_axis[2]
+    # Take points with |v| < 0.1, or at least the closest one
+    threshold = 0.1
+    selected = [j for av, j in candidates if av < threshold]
+    if not selected:
+        selected = [candidates[0][1]]
 
-        dx = px - axis_x
-        dy = py
+    total_excess = 0.0
+    for j in selected:
+        pt = station[j]
+        dx = pt[0] - axis_x
+        dy = pt[1]
         r = math.sqrt(dx * dx + dy * dy)
-        R = _mug_r_at_z(outer_profile, pz)
-        results.append(r - R)
+        R = _mug_r_at_z(outer_profile, pt[2])
+        total_excess += r - R
 
-    return results[0], results[1]
+    return total_excess / len(selected)
 
 
 def nudge_handle_stations(
@@ -75,18 +84,17 @@ def nudge_handle_stations(
 ) -> list[list[list[float]]]:
     """Nudge handle stations so endpoint cross-sections conform to the mug.
 
-    Each profile point at normalized coordinates (u, v) receives a radial
-    nudge (toward or away from the mug axis)::
+    At each endpoint, the radial excess is measured at the side rail
+    midline (v ≈ 0) — these are the points that stick out furthest
+    from the mug surface.  This single excess value is then applied
+    to all points in the station, weighted by the hypar term (1 - 4v²)
+    so inner/outer rails (v = ±0.5) get zero correction.
 
-        correction(u, v) = excess_side(u) * (1 - 4*v**2)
+    Two independent blends (top→midpoint and bottom→midpoint) decay
+    the correction to zero at the handle's midpoint.
 
-    where ``excess_side(u)`` linearly interpolates between the left and
-    right side-rail radial excesses, and ``(1 - 4*v**2)`` is a hypar
-    surface that preserves the inner/outer rails (v = ±0.5) while giving
-    full correction at the side-rail midline (v = 0).
-
-    Two independent blends (top→midpoint and bottom→midpoint) ensure the
-    correction decays to zero at the handle's midpoint.
+    The correction is applied radially (toward/away from mug axis)
+    using the station centroid's direction, preserving cross-section shape.
 
     Args:
         stations: List of cross-sections, each a list of [x, y, z] points.
@@ -102,27 +110,16 @@ def nudge_handle_stations(
     if n < 3 or station_frames is None or norm_profile is None:
         return stations
 
-    # Radial excess at side-rail midpoints of each endpoint
-    ex_left_top, ex_right_top = _side_rail_excess(
-        station_frames[0], outer_profile, axis_x,
+    # Single excess value at each endpoint, measured at side rail midline
+    top_excess = _side_rail_excess(
+        stations[0], norm_profile, outer_profile, axis_x,
     )
-    ex_left_bot, ex_right_bot = _side_rail_excess(
-        station_frames[n - 1], outer_profile, axis_x,
+    bot_excess = _side_rail_excess(
+        stations[n - 1], norm_profile, outer_profile, axis_x,
     )
 
-    import sys
-    print(f"DEBUG nudge: n={n} stations", file=sys.stderr)
-    print(f"  endpoint 0 centroid={station_frames[0].centroid}", file=sys.stderr)
-    print(f"  endpoint 0 sz={station_frames[0].sz:.3f}", file=sys.stderr)
-    print(f"  endpoint 0 z_axis={station_frames[0].z_axis}", file=sys.stderr)
-    print(f"  ex_left_top={ex_left_top:.4f}  ex_right_top={ex_right_top:.4f}", file=sys.stderr)
-    print(f"  endpoint {n-1} centroid={station_frames[n-1].centroid}", file=sys.stderr)
-    print(f"  ex_left_bot={ex_left_bot:.4f}  ex_right_bot={ex_right_bot:.4f}", file=sys.stderr)
-
-    # Show norm_profile range
-    us = [uv[0] for uv in norm_profile]
-    vs = [uv[1] for uv in norm_profile]
-    print(f"  norm_profile: {len(norm_profile)} pts, u=[{min(us):.3f},{max(us):.3f}], v=[{min(vs):.3f},{max(vs):.3f}]", file=sys.stderr)
+    # Pre-compute hypar weights for each profile point
+    hypar = [1.0 - 4.0 * v * v for _u, v in norm_profile]
 
     result: list[list[list[float]]] = []
     for i in range(n):
@@ -134,78 +131,38 @@ def nudge_handle_stations(
             result.append(stations[i])
             continue
 
-        # Debug: show first 10 stations near each endpoint
-        show_debug = (i < 10) or (i > n - 11)
+        # Blended excess for this station
+        excess = blend_top * top_excess + blend_bot * bot_excess
+
+        if abs(excess) < 1e-6:
+            result.append(stations[i])
+            continue
+
+        # Radial direction from station centroid (uniform for all points)
+        cx, cy, _ = station_frames[i].centroid
+        cdx = cx - axis_x
+        cdy = cy
+        cr = math.sqrt(cdx * cdx + cdy * cdy)
+        if cr < 0.001:
+            result.append(stations[i])
+            continue
+        rad_x = cdx / cr
+        rad_y = cdy / cr
 
         nudged: list[list[float]] = []
-        max_excess = 0.0
-        min_excess = 0.0
         for j, pt in enumerate(stations[i]):
-            u, v = norm_profile[j]
+            w = hypar[j]
+            correction = excess * w
 
-            # Hypar: 0 at inner/outer rails (v=±0.5), 1 at midline (v=0)
-            hypar = 1.0 - 4.0 * v * v
-
-            # Linear interpolation of side-rail excess across u
-            ex_top = ex_left_top * (0.5 - u) + ex_right_top * (0.5 + u)
-            ex_bot = ex_left_bot * (0.5 - u) + ex_right_bot * (0.5 + u)
-
-            excess = (blend_top * ex_top + blend_bot * ex_bot) * hypar
-            max_excess = max(max_excess, excess)
-            min_excess = min(min_excess, excess)
-
-            if abs(excess) < 1e-6:
+            if abs(correction) < 1e-6:
                 nudged.append(list(pt))
                 continue
 
-            # Radial direction at this point (XY plane, away from mug axis)
-            dx = pt[0] - axis_x
-            dy = pt[1]
-            r = math.sqrt(dx * dx + dy * dy)
-            if r < 0.001:
-                nudged.append(list(pt))
-                continue
-
-            rad_x = dx / r
-            rad_y = dy / r
-
-            # Subtract excess to bring point onto surface
             nudged.append([
-                pt[0] - excess * rad_x,
-                pt[1] - excess * rad_y,
+                pt[0] - correction * rad_x,
+                pt[1] - correction * rad_y,
                 pt[2],
             ])
-
-        if show_debug:
-            orig_xs = [pt[0] for pt in stations[i]]
-            orig_ys = [pt[1] for pt in stations[i]]
-            nudged_xs = [pt[0] for pt in nudged]
-            nudged_ys = [pt[1] for pt in nudged]
-            print(f"  station {i}: frac={frac:.3f} blend_top={blend_top:.3f} blend_bot={blend_bot:.3f}"
-                  f" excess=[{min_excess:.3f},{max_excess:.3f}]",
-                  file=sys.stderr)
-            print(f"    X: orig=[{min(orig_xs):.3f},{max(orig_xs):.3f}]"
-                  f" nudged=[{min(nudged_xs):.3f},{max(nudged_xs):.3f}]"
-                  f"  Y: orig=[{min(orig_ys):.3f},{max(orig_ys):.3f}]"
-                  f" nudged=[{min(nudged_ys):.3f},{max(nudged_ys):.3f}]",
-                  file=sys.stderr)
-            # Show a few representative points: side rail (max |u|) and inner/outer (max |v|)
-            if i < 6:
-                print(f"    per-point detail (u, v, excess, dx, dy):", file=sys.stderr)
-                for j2, pt2 in enumerate(stations[i]):
-                    u2, v2 = norm_profile[j2]
-                    h2 = 1.0 - 4.0 * v2 * v2
-                    ex_t = ex_left_top * (0.5 - u2) + ex_right_top * (0.5 + u2)
-                    ex_b = ex_left_bot * (0.5 - u2) + ex_right_bot * (0.5 + u2)
-                    exc2 = (blend_top * ex_t + blend_bot * ex_b) * h2
-                    dx2 = nudged[j2][0] - pt2[0]
-                    dy2 = nudged[j2][1] - pt2[1]
-                    if abs(exc2) > 0.01 or abs(u2) > 0.45 or abs(v2) > 0.45:
-                        print(f"      pt{j2}: u={u2:.3f} v={v2:.3f} hypar={h2:.3f}"
-                              f" excess={exc2:.3f} dx={dx2:.3f} dy={dy2:.3f}"
-                              f" orig=({pt2[0]:.2f},{pt2[1]:.2f},{pt2[2]:.2f})"
-                              f" nudged=({nudged[j2][0]:.2f},{nudged[j2][1]:.2f})",
-                              file=sys.stderr)
 
         result.append(nudged)
 

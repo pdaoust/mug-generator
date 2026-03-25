@@ -22,6 +22,9 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 
 ## Designing your mug
 
+> [!TIP]
+> I've found that B-splines create much more natural shapes than Bézier curves. When you go to create a shape with the Pen tool, look in the top toolbar, where it says **Mode**, and click on the button with a curve surrounded by a right-angle line (if you hover on it, its tooltip will say **Create BSpline path**). To create sharp corners, which you'll need for the edges of the profiles where they touch the left edge of the page, as well as the top of the filler hole, place three points in the same spot.
+
 1. Create five layers with the following names:
     * `mug body`: this'll hold the shape of the mug.
     * handle layers (optional -- but if you want a handle, all three need to exist)
@@ -77,4 +80,5 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 * Higher quality parameters (`$fa`, `$fn`, `$fs`) result in dramatically longer rendering times. Start with `$fn = 50` for your prototypes, then crank it up to 200 for the case mould.
 * Dramatic curves near handle attachment points might result in what's called 'degenerate' geometry -- creating pockets that cause rendering, slicing, or printing to fail in weird ways.
 * If you include a maker's mark, it gets generated slightly weirdly -- instead of a beveled edge, it's made up of a stack of increasingly smaller versions of the same shape. This is because the most obvious way of bevelling -- skinning between an enlarged and shrunken version of the mark -- creates strange mangled artifacts at the corners. Each slice in the stack is one layer height thick, so make sure your **Layer Height** quality setting matches your print settings!
+* Strange mug geometries such as deeply concave/convex mug body curves or broad flares at the ends of a mug handle might produce glitchy models. Play around with the curves until the glitches go away.
 * This project was 100% AI vibe-coded with Claude Opus 4.6. I take no responsibility for the quality of the code. I was more interested in results than I was in the craft of writing code -- I'll save the craft for the pottery studio!

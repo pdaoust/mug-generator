@@ -583,6 +583,152 @@ module case_base() {
 }
 
 // =====================================================================
+// PLASTER VOLUME ESTIMATION
+// =====================================================================
+// Approximate per-part plaster volumes using BOSL2 VNF volumes.
+// Low-res ($fn=36) keeps parse time short; slight overestimate is
+// desirable (you always need a bit more plaster than you think).
+// The maker's mark is ignored — negligible impact on volume.
+
+// Approximate outward offset of a half-profile (list of [r, z] points).
+// Extends the top to cap_z so the hull encompasses the filler tube.
+function _offset_profile(pts, off, cap_z) =
+    let(
+        n = len(pts),
+        top_r = pts[n-1][0] + off,
+        raw_top_z = pts[n-1][1] + off,
+        use_top_z = is_undef(cap_z) ? raw_top_z : max(raw_top_z, cap_z)
+    )
+    concat(
+        [[0, pts[0][1] - off]],
+        [for (p = pts) [p[0] + off, p[1]]],
+        use_top_z > pts[n-1][1] ? [[top_r, use_top_z]] : [],
+        [[0, use_top_z]]
+    );
+
+// Clip a half-profile to z >= z_cut, interpolating at the boundary.
+function _clip_profile_above(pts, z_cut) =
+    let(n = len(pts))
+    [for (i = [0:n-1])
+        let(
+            p = pts[i],
+            prev = i > 0 ? pts[i-1] : undef,
+            next = i < n-1 ? pts[i+1] : undef
+        )
+        each concat(
+            (prev != undef && prev[1] < z_cut && p[1] >= z_cut)
+                ? [let(t = (z_cut - prev[1]) / (p[1] - prev[1]))
+                   [prev[0] + t * (p[0] - prev[0]), z_cut]]
+                : [],
+            p[1] >= z_cut ? [p] : [],
+            (next != undef && p[1] >= z_cut && next[1] < z_cut)
+                ? [let(t = (z_cut - p[1]) / (next[1] - p[1]))
+                   [p[0] + t * (next[0] - p[0]), z_cut]]
+                : []
+        )
+    ];
+
+// Clip a half-profile to z <= z_cut, interpolating at the boundary.
+function _clip_profile_below(pts, z_cut) =
+    let(n = len(pts))
+    [for (i = [0:n-1])
+        let(
+            p = pts[i],
+            prev = i > 0 ? pts[i-1] : undef,
+            next = i < n-1 ? pts[i+1] : undef
+        )
+        each concat(
+            (prev != undef && prev[1] > z_cut && p[1] <= z_cut)
+                ? [let(t = (z_cut - prev[1]) / (p[1] - prev[1]))
+                   [prev[0] + t * (p[0] - prev[0]), z_cut]]
+                : [],
+            p[1] <= z_cut ? [p] : [],
+            (next != undef && p[1] <= z_cut && next[1] > z_cut)
+                ? [let(t = (z_cut - p[1]) / (next[1] - p[1]))
+                   [p[0] + t * (next[0] - p[0]), z_cut]]
+                : []
+        )
+    ];
+
+// --- VNF construction (low-res for speed) ---
+_vol_fn = 36;
+
+// Safe sweep: guard against degenerate profiles (< 2 points or zero height)
+// that would trigger BOSL2 assertions in skew()/rotate_sweep().
+function _profile_height(pts) =
+    let(zs = [for (p = pts) p[1]])
+    max(zs) - min(zs);
+function _safe_sweep(pts, fn) =
+    len(pts) >= 2 && _profile_height(pts) > 0.001
+        ? rotate_sweep(pts, caps=true, $fn=fn)
+        : EMPTY_VNF;
+
+_vnf_outer = _safe_sweep(_outer, _vol_fn);
+_vnf_handle = handle_enabled
+    ? skin(handle_stations_extended, slices=0, caps=true, method="reindex")
+    : EMPTY_VNF;
+
+// The inner solid (filler tube) is contained within the outer solid
+// below mug_max_z.  Only the portion above the rim adds volume.
+_inner_above_rim = _clip_profile_above(_inner, mug_max_z);
+_vnf_filler = _safe_sweep(_inner_above_rim, _vol_fn);
+
+// Hull: outer profile offset by plaster_thickness, extended to inner_top_z
+// so the hull encompasses the filler tube.
+_hull_profile = _offset_profile(_outer, plaster_thickness, inner_top_z);
+_vnf_hull = _safe_sweep(_hull_profile, _vol_fn);
+
+_v_outer = abs(vnf_volume(_vnf_outer));
+_v_filler = abs(vnf_volume(_vnf_filler));
+_v_handle = handle_enabled ? abs(vnf_volume(_vnf_handle)) : 0;
+_v_positive = _v_outer + _v_filler + _v_handle;
+_v_hull = abs(vnf_volume(_vnf_hull));
+
+// --- 2-part volumes ---
+_v_2part_half = (_v_hull - _v_positive) / 2;
+
+// --- 3-part volumes ---
+_outer_above = _clip_profile_above(_outer, _foot_z);
+_outer_below = _clip_profile_below(_outer, _foot_z);
+_hull_above = _clip_profile_above(_hull_profile, _foot_z);
+
+_vnf_outer_above = _safe_sweep(_outer_above, _vol_fn);
+_vnf_outer_below = _safe_sweep(_outer_below, _vol_fn);
+_vnf_hull_above = _safe_sweep(_hull_above, _vol_fn);
+
+// Inner/filler is entirely above _foot_z, so reuse full _v_filler.
+_v_positive_above = abs(vnf_volume(_vnf_outer_above))
+                  + _v_filler
+                  + _v_handle;
+_v_hull_above_vol = abs(vnf_volume(_vnf_hull_above));
+_v_3part_upper_half = (_v_hull_above_vol - _v_positive_above) / 2;
+
+// Base: rectangular box interior minus foot positive
+_v_base_box_interior = (2 * _base_x_half) * (2 * _base_y_half)
+                     * (_foot_z - wall_thickness - _base_z_bot);
+_v_foot_positive = abs(vnf_volume(_vnf_outer_below));
+_v_3part_base = _v_base_box_interior - _v_foot_positive;
+
+// --- Echo volume estimates ---
+if (mould_type == 2) {
+    echo(str(""));
+    echo(str("=== PLASTER VOLUME ESTIMATES (2-part mould) ==="));
+    echo(str("  Half A:  ", round(_v_2part_half / 100) / 10, " mL"));
+    echo(str("  Half B:  ", round(_v_2part_half / 100) / 10, " mL"));
+    echo(str("  Total:   ", round(_v_2part_half / 50) / 10, " mL"));
+    echo(str("================================================"));
+} else if (mould_type == 3) {
+    _v_3part_total = 2 * _v_3part_upper_half + _v_3part_base;
+    echo(str(""));
+    echo(str("=== PLASTER VOLUME ESTIMATES (3-part mould) ==="));
+    echo(str("  Half A:  ", round(_v_3part_upper_half / 100) / 10, " mL"));
+    echo(str("  Half B:  ", round(_v_3part_upper_half / 100) / 10, " mL"));
+    echo(str("  Base:    ", round(_v_3part_base / 100) / 10, " mL"));
+    echo(str("  Total:   ", round(_v_3part_total / 100) / 10, " mL"));
+    echo(str("================================================"));
+}
+
+// =====================================================================
 // RENDER — print-ready orientation
 // =====================================================================
 //

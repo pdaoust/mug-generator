@@ -339,10 +339,13 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "breather_hole_dia": self.options.breather_hole_dia,
             "breather_hole_count": self.options.breather_hole_count,
         }
-        if concavity:
+        # A maker's mark requires a 3-part mould (mark is in the base)
+        # even when the foot has no concavity.
+        if concavity or mark_enabled:
             mould_params["mould_type"] = 3
-            mould_params["foot_concavity_z"] = concavity[0]
-            mould_params["foot_concavity_radius"] = concavity[1]
+            if concavity:
+                mould_params["foot_concavity_z"] = concavity[0]
+                mould_params["foot_concavity_radius"] = concavity[1]
         else:
             mould_params["mould_type"] = 2
 

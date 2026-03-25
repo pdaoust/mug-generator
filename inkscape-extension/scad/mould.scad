@@ -107,10 +107,10 @@ module _mug_outer_solid_raw() {
     rotate_extrude() polygon(points = _solid_outer_profile);
 }
 
-// Z of the mug base centre — where the profile meets the Z axis
-// at the bottom.  This is above mug_min_z for mugs with a foot ring
-// (mug_min_z is the foot, _mark_z is the recessed base inside it).
-_mark_z = _outer[0][1];
+// Z of the mug base — used to position the maker's mark stamp.
+// For foot-ring mugs this is the foot bottom (the stamp extends upward
+// and only intersects the solid at the recessed base centre).
+_mark_z = mug_min_z;
 
 module mug_outer_solid() {
     if (mark_enabled && mark_inset) {
@@ -234,8 +234,16 @@ function mug_r_at_z(z) =
         ]
     ) len(results) > 0 ? max(results) : prof[0][0];
 
-_foot_z = (is_undef(foot_concavity_z) ? 0 : foot_concavity_z * _cs)
-        + (mark_enabled && mark_inset ? _mark_depth : 0);
+// Split Z for the 3-part mould.  Baseline is the foot concavity Z
+// (or _mark_z when a mark forces 3-part without concavity).
+// Inset marks add _mark_depth so the upward-cutting stamp stays in
+// the base piece.  Protruding marks extend below _mark_z and are
+// already captured by the baseline.
+_foot_z = (is_undef(foot_concavity_z)
+        ? (mark_enabled ? _mark_z : 0)
+        : foot_concavity_z * _cs)
+    + (mark_enabled && mark_inset ? _mark_depth : 0);
+
 
 // Handle rail projections onto the XZ plane (2D mould coordinates:
 // X = 3D X, Y = 3D Z).  Inner = closest to mug (min X per station),

@@ -92,8 +92,18 @@ class MugSurface:
         if not has_concavity:
             return None
 
-        # Find the Z at which radius returns to r_foot (interpolate)
-        for i in range(1, len(self.profile)):
+        # Find the deepest point of the concavity (minimum radius), then
+        # search for the crossing back to r_foot AFTER that point.  This
+        # avoids false early crossings caused by SVG sampling noise near
+        # the foot bottom.
+        min_r = r_foot
+        min_idx = 0
+        for i, (r, z) in enumerate(self.profile):
+            if r < min_r:
+                min_r = r
+                min_idx = i
+
+        for i in range(min_idx + 1, len(self.profile)):
             r0, z0 = self.profile[i - 1]
             r1, z1 = self.profile[i]
             if r0 < r_foot - 1e-9 and r1 >= r_foot - 1e-9:

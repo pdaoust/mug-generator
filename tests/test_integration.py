@@ -174,10 +174,11 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "mark_layer_height": mark_layer_height,
         "mark_enabled": mark_enabled,
     }
-    if concavity:
+    if concavity or mark_enabled:
         mould_params["mould_type"] = 3
-        mould_params["foot_concavity_z"] = concavity[0]
-        mould_params["foot_concavity_radius"] = concavity[1]
+        if concavity:
+            mould_params["foot_concavity_z"] = concavity[0]
+            mould_params["foot_concavity_radius"] = concavity[1]
     else:
         mould_params["mould_type"] = 2
 

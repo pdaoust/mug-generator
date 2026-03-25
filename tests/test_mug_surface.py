@@ -87,3 +87,20 @@ class TestFootConcavity:
         # Linear interp: r goes from 26→34 over z 3→7, crosses 30 at z=5
         assert z == pytest.approx(5.0)
         assert r == pytest.approx(30.0)
+
+    def test_noise_near_foot_bottom(self):
+        # SVG sampling noise: tiny dip near the foot bottom resolves
+        # immediately, but the real concavity is deeper and resolves later.
+        # Profile: foot at r=30 z=0, noise dip to 29.99 at z=0.01,
+        # back to 30 at z=0.02, then real concavity to 25 at z=1.5,
+        # resolves at z=3.
+        surface = MugSurface([
+            [30, 0], [29.99, 0.01], [30, 0.02],
+            [27, 0.5], [25, 1.5], [27, 2.5], [30, 3], [35, 100],
+        ])
+        result = surface.detect_foot_concavity()
+        assert result is not None
+        z, r = result
+        # Should find the real crossing at z=3, not the noise at z=0.02
+        assert z == pytest.approx(3.0)
+        assert r == pytest.approx(30.0)

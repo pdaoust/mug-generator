@@ -200,4 +200,17 @@ def sample_rails(
             arc_length_fraction=frac,
         ))
 
+    # Enforce consistent z_axis orientation along the handle.
+    # Where the handle curves, x_axis can flip direction, causing
+    # z_axis = cross(x_axis, y_axis) to flip sign.  This would make
+    # the profile vertices swap sides between adjacent stations,
+    # creating a twist in the skin() loft.
+    for i in range(1, len(stations)):
+        if _dot3(stations[i].z_axis, stations[i - 1].z_axis) < 0:
+            stations[i].z_axis = (
+                -stations[i].z_axis[0],
+                -stations[i].z_axis[1],
+                -stations[i].z_axis[2],
+            )
+
     return stations

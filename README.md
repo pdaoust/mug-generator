@@ -21,13 +21,6 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 6. Select the package you downloaded.
 
 ## Designing your mug
-Tony Hansen -- [this 3D-printed case mould design](https://digitalfire.com/picture/3728) of his is the inspiration for this whole project.
-
-## Installing
-
-1. Install the prerequisites:
-    * [Inkscape](https://inkscape.org/) 1.2 or higher
-Note: The [`example.svg`](https://github.com/pdaoust/mug-generator/blob/main/example.svg) file in the root of this repo shows you all the parts. Refer to that file while you're reading the steps below.
 
 1. Create five layers with the following names:
     * `mug body`: this'll hold the shape of the mug.

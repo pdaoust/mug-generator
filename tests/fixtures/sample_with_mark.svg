@@ -6,10 +6,9 @@
 
   <sodipodi:namedview inkscape:document-units="mm" />
 
-  <!-- Mug body: outer and inner profiles -->
+  <!-- Mug body: single closed cross-section -->
   <g inkscape:groupmode="layer" inkscape:label="mug body">
-    <path d="M 30,20 L 35,20 L 35,180 L 30,180" />
-    <path d="M 30,23 L 32,23 L 32,180 L 30,180" />
+    <path d="M 35,20 L 35,180 L 30,180 L 0,180 L 0,177 L 32,177 L 32,23 L 30,20 Z" />
   </g>
 
   <!-- Handle rails -->

@@ -32,6 +32,7 @@ from lib.profile_transformer import generate_handle_stations, normalize_profile
 from lib.scad_writer import run_all_emitters
 from lib.preview import draw_preview
 from lib.handle_nudge import nudge_handle_stations
+from lib.profile_split import split_body_profile
 
 
 class MugGeneratorEffect(inkex.EffectExtension):
@@ -47,6 +48,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--plaster_thickness", type=float, default=30.0)
         pars.add_argument("--wall_thickness", type=float, default=0.8)
         pars.add_argument("--natch_radius", type=float, default=6.75)
+        pars.add_argument("--filler_tube_height", type=float, default=15.0)
         pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
         pars.add_argument("--funnel_wall", type=float, default=1.5)
         pars.add_argument("--flange_width", type=float, default=3.0)
@@ -100,8 +102,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Required layers
         required = {
             "mug body": {
-                "min": 2, "max": 2,
-                "desc": "outer wall profile and inner wall profile (half-profiles in the XZ plane)",
+                "min": 1, "max": 1,
+                "desc": "one closed cross-section path (outer wall, rim, inner wall, floor)",
             },
         }
 
@@ -185,9 +187,13 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         mug_body_paths = layers["mug body"]
 
-        # Convert to mm
-        mug_outer_mm = svg_to_mm(mug_body_paths[0])
-        mug_inner_mm = svg_to_mm(mug_body_paths[1])
+        # Convert to mm — split closed profile at rim
+        body_mm = svg_to_mm(mug_body_paths[0])
+        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+        rim_z = mug_outer_mm[0][1]
+        inner_r = mug_inner_mm[0][0]
+        tube_top = rim_z + self.options.filler_tube_height
+        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
 
         # Build mug surface (outer profile — used for cylinder wrapping)
         mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
@@ -240,8 +246,12 @@ class MugGeneratorEffect(inkex.EffectExtension):
                                              max_seg_len=svg_body_seg)
             profile_paths = get_layer_paths(svg, "handle profile",
                                             max_seg_len=svg_handle_seg)
-            mug_outer_mm = svg_to_mm(mug_body_paths[0])
-            mug_inner_mm = svg_to_mm(mug_body_paths[1])
+            body_mm = svg_to_mm(mug_body_paths[0])
+            mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+            rim_z = mug_outer_mm[0][1]
+            inner_r = mug_inner_mm[0][0]
+            tube_top = rim_z + self.options.filler_tube_height
+            mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
             handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
             stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
@@ -270,8 +280,12 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
             mug_body_paths = get_layer_paths(svg, "mug body",
                                              max_seg_len=svg_body_seg)
-            mug_outer_mm = svg_to_mm(mug_body_paths[0])
-            mug_inner_mm = svg_to_mm(mug_body_paths[1])
+            body_mm = svg_to_mm(mug_body_paths[0])
+            mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+            rim_z = mug_outer_mm[0][1]
+            inner_r = mug_inner_mm[0][0]
+            tube_top = rim_z + self.options.filler_tube_height
+            mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
 
         shrinkage_pct = self.options.clay_shrinkage
 

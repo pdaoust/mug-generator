@@ -15,6 +15,7 @@ from lib.side_rail_extender import apply_side_rails
 from lib.profile_transformer import generate_handle_stations, normalize_profile
 from lib.scad_writer import run_all_emitters
 from lib.handle_nudge import nudge_handle_stations
+from lib.profile_split import split_body_profile
 
 
 FIXTURE_SVG = Path(__file__).parent / "fixtures" / "sample.svg"
@@ -46,8 +47,13 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         ]
 
     mug_body_paths = get_layer_paths(svg_root, "mug body")
-    mug_outer_mm = svg_to_mm(mug_body_paths[0])
-    mug_inner_mm = svg_to_mm(mug_body_paths[1])
+    body_mm = svg_to_mm(mug_body_paths[0])
+    mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+    filler_tube_height = 15.0
+    rim_z = mug_outer_mm[0][1]
+    inner_r = mug_inner_mm[0][0]
+    tube_top = rim_z + filler_tube_height
+    mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
 
     mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
 
@@ -99,8 +105,12 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
                                          max_seg_len=svg_body_seg)
         profile_paths = get_layer_paths(svg_root, "handle profile",
                                         max_seg_len=svg_handle_seg)
-        mug_outer_mm = svg_to_mm(mug_body_paths[0])
-        mug_inner_mm = svg_to_mm(mug_body_paths[1])
+        body_mm = svg_to_mm(mug_body_paths[0])
+        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+        rim_z = mug_outer_mm[0][1]
+        inner_r = mug_inner_mm[0][0]
+        tube_top = rim_z + filler_tube_height
+        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
         handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
         stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
@@ -127,8 +137,12 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
 
         mug_body_paths = get_layer_paths(svg_root, "mug body",
                                          max_seg_len=svg_body_seg)
-        mug_outer_mm = svg_to_mm(mug_body_paths[0])
-        mug_inner_mm = svg_to_mm(mug_body_paths[1])
+        body_mm = svg_to_mm(mug_body_paths[0])
+        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+        rim_z = mug_outer_mm[0][1]
+        inner_r = mug_inner_mm[0][0]
+        tube_top = rim_z + filler_tube_height
+        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
 
     # Raw polygon vertices in path order — X = radius from document origin.
     # Data is at actual (fired) size; clay shrinkage scaling is in the SCAD files.

@@ -6,13 +6,11 @@
 
   <sodipodi:namedview inkscape:document-units="mm" />
 
-  <!-- Mug body: outer and inner profiles -->
+  <!-- Mug body: single closed cross-section -->
   <!-- SVG Y down → 3D Z up, so y=20→z=180, y=180→z=20 -->
+  <!-- Traces: rim outer → outer wall down → floor to axis → up inner wall → rim inner → back to start -->
   <g inkscape:groupmode="layer" inkscape:label="mug body">
-    <!-- Outer profile -->
-    <path d="M 30,20 L 35,20 L 35,180 L 30,180" />
-    <!-- Inner profile (offset inward by ~3mm wall, shorter for floor) -->
-    <path d="M 30,23 L 32,23 L 32,180 L 30,180" />
+    <path d="M 35,20 L 35,180 L 30,180 L 0,180 L 0,177 L 32,177 L 32,23 L 30,20 Z" />
   </g>
 
   <!-- Handle rails: inner at x=35 (on mug surface), outer at x=55 -->

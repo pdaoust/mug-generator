@@ -14,11 +14,10 @@ Create the following layers (exact names, case-insensitive):
 
       <label appearance="header">mug body</label>
       <label>
-Two paths: outer profile and inner profile.
-Each is a half-profile polyline in the XZ plane (SVG X = radius,
-SVG Y = height). The mug axis of symmetry is at the document
-X origin (x=0). The inner profile defines the hollow interior,
-lip shape, floor thickness, and filling tube height and diameter.
+One closed path: the full mug cross-section (outer wall, over the
+rim, inner wall, floor). The extension splits it at the rim and
+auto-generates the pouring tube.
+SVG X = radius, SVG Y = height. Mug axis at document X origin (x=0).
       </label>
       <separator />
 
@@ -93,6 +92,9 @@ are supported.
       <param name="natch_radius" type="float" min="3.0" max="20.0" precision="2"
              gui-text="Natch hole radius (mm)"
              gui-description="Radius of alignment natch holes between mould parts. Use 6.75 for Tony Hansen's 3D printed natch system.">6.75</param>
+      <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
+             gui-text="Filler tube height (mm)"
+             gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>
 
       <separator />
       <label appearance="header">Pouring funnel</label>

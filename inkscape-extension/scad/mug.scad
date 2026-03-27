@@ -150,3 +150,17 @@ module mug_assembly() {
 }
 
 mug_assembly();
+
+// =====================================================================
+// MUG VOLUME ESTIMATION
+// =====================================================================
+
+_inner = [for (i = [body_foot_idx:len(mug_body_profile)-1])
+    mug_body_profile[i]];
+_vnf_inner = rotate_sweep(_inner, caps=true, $fn=36);
+_v_mug_ml = round(abs(vnf_volume(_vnf_inner)) / 1000);
+
+echo(str(""));
+echo(str("=== MUG VOLUME ==="));
+echo(str("  Capacity:  ", _v_mug_ml, " mL"));
+echo(str("=================="));

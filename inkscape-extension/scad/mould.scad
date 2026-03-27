@@ -618,22 +618,52 @@ _v_base_box_interior = (2 * _base_x_half) * (2 * _base_y_half)
 _v_foot_positive = abs(vnf_volume(_vnf_outer_below));
 _v_3part_base = _v_base_box_interior - _v_foot_positive;
 
+// --- Slip volumes (greenware, clay-scaled) ---
+
+// Inner profile: foot center → inner floor → inner wall → rim
+_inner = [for (i = [body_foot_idx:len(_body)-1]) _body[i]];
+_vnf_inner = _safe_sweep(_inner, _vol_fn);
+_v_mug_capacity = abs(vnf_volume(_vnf_inner));
+
+// Slip fill: mug interior + filler tube above the rim.
+_slip_tube = [
+    [_inner[len(_inner)-1][0], _split_z],
+    [_split_r, _split_z],
+    [_split_r, _tube_top_z],
+    [0, _tube_top_z],
+];
+_vnf_slip_tube = _safe_sweep(_slip_tube, _vol_fn);
+_v_slip_fill = _v_mug_capacity + abs(vnf_volume(_vnf_slip_tube));
+
+// Outer profile revolve = total volume enclosed by outer surface
+_vnf_outer_full = _safe_sweep(_outer, _vol_fn);
+_v_mug_outer = abs(vnf_volume(_vnf_outer_full));
+
+// Slip retained = solid clay walls = outer minus cavity
+_v_slip_retained = _v_mug_outer - _v_mug_capacity;
+
 // --- Echo volume estimates ---
+echo(str(""));
+echo(str("=== SLIP VOLUME (greenware) ==="));
+echo(str("  Slip fill:      ", round(_v_slip_fill / 1000), " mL"));
+echo(str("  Slip retained:  ", round(_v_slip_retained / 1000), " mL"));
+echo(str("================================"));
+
 if (mould_type == 2) {
     echo(str(""));
     echo(str("=== PLASTER VOLUME ESTIMATES (2-part mould) ==="));
-    echo(str("  Half A:  ", round(_v_2part_half / 100) / 10, " mL"));
-    echo(str("  Half B:  ", round(_v_2part_half / 100) / 10, " mL"));
-    echo(str("  Total:   ", round(_v_2part_half / 50) / 10, " mL"));
+    echo(str("  Half A:  ", round(_v_2part_half / 1000), " mL"));
+    echo(str("  Half B:  ", round(_v_2part_half / 1000), " mL"));
+    echo(str("  Total:   ", round(2 * _v_2part_half / 1000), " mL"));
     echo(str("================================================"));
 } else if (mould_type == 3) {
     _v_3part_total = 2 * _v_3part_upper_half + _v_3part_base;
     echo(str(""));
     echo(str("=== PLASTER VOLUME ESTIMATES (3-part mould) ==="));
-    echo(str("  Half A:  ", round(_v_3part_upper_half / 100) / 10, " mL"));
-    echo(str("  Half B:  ", round(_v_3part_upper_half / 100) / 10, " mL"));
-    echo(str("  Base:    ", round(_v_3part_base / 100) / 10, " mL"));
-    echo(str("  Total:   ", round(_v_3part_total / 100) / 10, " mL"));
+    echo(str("  Half A:  ", round(_v_3part_upper_half / 1000), " mL"));
+    echo(str("  Half B:  ", round(_v_3part_upper_half / 1000), " mL"));
+    echo(str("  Base:    ", round(_v_3part_base / 1000), " mL"));
+    echo(str("  Total:   ", round(_v_3part_total / 1000), " mL"));
     echo(str("================================================"));
 }
 

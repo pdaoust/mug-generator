@@ -84,7 +84,14 @@ module mug_body() {
 }
 
 // --- Maker's mark stamp ---
-_mark_z = mug_min_z;
+_foot_center_z = _body[body_foot_idx][1];
+_mark_tol = 0.25 * _mark_depth;
+_foot_roof_z_mould = [for (i = [0:body_foot_idx])
+    let(z = _body[i][1])
+    if (abs(z - _foot_center_z) <= _mark_tol) z];
+_mark_z = mark_inset
+    ? min(_foot_roof_z_mould)
+    : max(_foot_roof_z_mould);
 
 _mark_draft = _mark_depth * tan(mark_draft_angle);
 _mark_half_draft = _mark_draft / 2;

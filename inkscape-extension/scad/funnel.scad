@@ -108,8 +108,14 @@ neck_r = pour_hole_r - funnel_clearance;
 module mug_body_shell() {
     difference() {
         rotate_extrude()
-            offset(delta = funnel_wall)
-                polygon(points = _body);
+            intersection() {
+                offset(delta = funnel_wall)
+                    polygon(points = _body);
+                // Clip to positive X — offset can push axis
+                // points negative, which rotate_extrude rejects.
+                translate([0, -500])
+                    square([1000, 1000]);
+            }
         rotate_extrude()
             polygon(points = _body);
     }

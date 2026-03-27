@@ -90,7 +90,20 @@ module handle() {
 mug_min_z = min([for (p = _outer) p[1]]);
 
 // Z of the mug base centre (foot center on the axis).
-_mark_z = mug_body_profile[body_foot_idx][1];
+_foot_center_z = mug_body_profile[body_foot_idx][1];
+
+// Foot-roof points within 0.25 * mark_depth of the foot center Z.
+// Bezier interpolation can round the foot-ring corner, making the
+// roof slightly non-flat.  For debossed marks we use the lowest
+// point so the stamp reaches the full surface; for embossed marks
+// we use the highest so the stamp sits above the full surface.
+_mark_tol = 0.25 * mark_depth;
+_foot_roof_z = [for (i = [0:body_foot_idx])
+    let(z = mug_body_profile[i][1])
+    if (abs(z - _foot_center_z) <= _mark_tol) z];
+_mark_z = mark_inset
+    ? min(_foot_roof_z)
+    : max(_foot_roof_z);
 
 _mark_draft = mark_depth * tan(mark_draft_angle);
 _mark_half_draft = _mark_draft / 2;

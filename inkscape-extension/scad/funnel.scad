@@ -13,8 +13,7 @@
 include <BOSL2/std.scad>
 
 include <mug_params.scad>
-include <mug_outer_profile.scad>
-include <mug_inner_profile.scad>
+include <mug_body_profile.scad>
 
 // =====================================================================
 // HARDCODED PARAMETERS
@@ -26,25 +25,31 @@ funnel_clearance = 0.5;     // Gap between neck and pouring hole (mm)
 // =====================================================================
 // CLAY SHRINKAGE SCALING
 // =====================================================================
-// Data files contain actual (fired) dimensions.  The funnel must match
-// the mould, so mug geometry is scaled for clay shrinkage.
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_inner = [for (p = mug_inner_profile) p * _cs];
-_outer = [for (p = mug_outer_profile) p * _cs];
+_body = [for (p = mug_body_profile) p * _cs];
+_tube_h = filler_tube_height * _cs;
+
+// =====================================================================
+// DERIVED PROFILES
+// =====================================================================
+
+_outer = [for (i = [0:body_foot_idx]) _body[i]];
+_split_r = _body[0][0];
+_split_z = _body[0][1];
+_tube_top_z = _split_z + _tube_h;
 
 // =====================================================================
 // DERIVED VALUES
 // =====================================================================
 
-inner_top_z = max([for (p = _inner) p[1]]);
+inner_top_z = _tube_top_z;
 
-// Interpolate inner profile radius at a given Z.
-// Returns the maximum radius found at that Z.
-function inner_r_at_z(z) =
+// Interpolate outer radius at a given Z.
+function outer_r_at_z(z) =
     let(
-        prof = _inner, n = len(prof),
+        prof = _outer, n = len(prof),
         results = [for (i = [0:n-1])
             let(j = (i + 1) % n,
                 z0 = prof[i][1], z1 = prof[j][1],
@@ -55,17 +60,17 @@ function inner_r_at_z(z) =
         ]
     ) len(results) > 0 ? max(results) : prof[0][0];
 
-pour_hole_r = inner_r_at_z(inner_top_z);
+pour_hole_r = _split_r;
 cone_top_r = pour_hole_r + cone_height * tan(funnel_wall_angle);
 
 // lip_top_z: highest Z of the outer body profile
-lip_top_z = max([for (p = _outer) p[1]]);
+lip_top_z = _split_z;
 
 // Vertical-tangent detection: walk the inner profile downward from
 // lip_top_z.  The rim area narrows; at some point the bowl widens again.
-// The lip form stops at the last narrowing node (just before the first
-// widening).  Sort by descending Z, then find the first pair where
-// radius increases going down.
+// The lip form stops at the last narrowing node.
+_inner = [for (i = [body_foot_idx:len(_body)-1]) _body[i]];
+
 function _sort_by_z_desc(pts) =
     len(pts) <= 1 ? pts :
     let(
@@ -81,8 +86,6 @@ _inner_below_lip = [for (p = _inner)
 
 _inner_sorted = _sort_by_z_desc(_inner_below_lip);
 
-// Walk from top: find the first pair where radius INCREASES going down
-// (lower Z point has larger radius).  Take the higher-Z node of that pair.
 _first_vtangent_z = let(
     pts = _inner_sorted,
     n = len(pts),
@@ -96,26 +99,26 @@ lip_bottom_z = max(lip_top_z - 3, _first_vtangent_z);
 neck_r = pour_hole_r - funnel_clearance;
 
 // =====================================================================
-// MUG INNER SOLID (duplicated from mould.scad to avoid use<> scoping)
+// LIP FORM — hollow shell from mug body profile
 // =====================================================================
 
-_n_inner = len(_inner);
-_solid_inner_profile = concat(
-    _inner,
-    [[0, _inner[_n_inner - 1][1]],
-     [0, _inner[0][1]]]
-);
+// Lip form: the mug body shell (rotate_extrude of profile minus
+// outset profile) clipped to the lip region and pour hole radius.
 
-module mug_inner_solid() {
-    rotate_extrude() polygon(points = _solid_inner_profile);
+module mug_body_shell() {
+    difference() {
+        rotate_extrude()
+            offset(delta = funnel_wall)
+                polygon(points = _body);
+        rotate_extrude()
+            polygon(points = _body);
+    }
 }
 
 // =====================================================================
 // FUNNEL PARTS
 // =====================================================================
 
-// Flange sits flush with the top of the inner body (plaster mould surface).
-// The printed case mould is peeled away, so wall_thickness is irrelevant here.
 flange_z = inner_top_z;
 cone_base_z = flange_z + funnel_wall;
 
@@ -133,21 +136,17 @@ module funnel_cone() {
         }
 }
 
-// 2. Flange (depth stop) — rests on the mould top surface.
-//    Top has a 45° taper from the cone junction outward so the overhang
-//    can print without support when the funnel is upside down.
-//    Built with rotate_extrude of a trapezoidal cross-section.
-//    The 45° slope drops funnel_wall mm over funnel_wall mm of radius.
+// 2. Flange (depth stop)
 flange_outer_r = pour_hole_r + flange_width;
 
 module funnel_flange() {
     rotate_extrude()
         polygon(points = [
-            [pour_hole_r - funnel_wall, flange_z],              // inner bottom
-            [flange_outer_r,            flange_z],              // outer bottom
-            [pour_hole_r + funnel_wall, flange_z],              // where 45° meets bottom
-            [pour_hole_r,               cone_base_z],           // top at cone junction
-            [pour_hole_r - funnel_wall, cone_base_z],           // inner top
+            [pour_hole_r - funnel_wall, flange_z],
+            [flange_outer_r,            flange_z],
+            [pour_hole_r + funnel_wall, flange_z],
+            [pour_hole_r,               cone_base_z],
+            [pour_hole_r - funnel_wall, cone_base_z],
         ]);
 }
 
@@ -163,7 +162,7 @@ module funnel_neck() {
         }
 }
 
-// 4. Lip form (shapes the mug's rim) — hollow shell, open at the bottom,
+// 4. Lip form — the mug body shell clipped to the lip region,
 //    with breather holes for slip flow.
 breather_r = breather_hole_dia / 2;
 breather_z = lip_top_z - breather_r;
@@ -171,19 +170,14 @@ breather_z = lip_top_z - breather_r;
 module funnel_lip_form() {
     difference() {
         intersection() {
-            mug_inner_solid();
+            mug_body_shell();
             // Clip to pouring hole radius
             cylinder(h = 2000, r = neck_r, center = true);
             // Clip to lip Z range
             translate([0, 0, (lip_top_z + lip_bottom_z) / 2])
                 cube([2000, 2000, lip_top_z - lip_bottom_z], center = true);
         }
-        // Hollow out: a simple cylinder removes the core, leaving a
-        // funnel_wall-thick shell.  Starts below lip_bottom_z so the
-        // bottom face is open.
-        cylinder(h = 2000, r = neck_r - funnel_wall, center = true);
-        // Breather holes: radial cylinders pointing inward so slip can
-        // flow up between the lip form and the plaster mould.
+        // Breather holes
         for (i = [0:breather_hole_count - 1])
             rotate([0, 0, i * 360 / breather_hole_count])
                 translate([neck_r, 0, breather_z])

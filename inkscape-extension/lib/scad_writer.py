@@ -53,16 +53,12 @@ def _emit_profile_array(name: str, profile: list, output_dir: Path, filename: st
     (output_dir / filename).write_text("".join(lines))
 
 
-@emitter("mug_profiles")
-def _emit_mug_profiles(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit mug_outer_profile.scad and mug_inner_profile.scad."""
+@emitter("mug_body_profile")
+def _emit_mug_body_profile(data: dict[str, Any], output_dir: Path) -> None:
+    """Emit mug_body_profile.scad — single closed cross-section."""
     _emit_profile_array(
-        "mug_outer_profile", data["mug_outer_profile"],
-        output_dir, "mug_outer_profile.scad",
-    )
-    _emit_profile_array(
-        "mug_inner_profile", data["mug_inner_profile"],
-        output_dir, "mug_inner_profile.scad",
+        "mug_body_profile", data["mug_body_profile"],
+        output_dir, "mug_body_profile.scad",
     )
 
 
@@ -134,6 +130,12 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     for key in ("plaster_thickness", "wall_thickness", "natch_radius"):
         if key in params:
             lines.append(f"{key} = {params[key]:.6f};\n")
+
+    # Body profile indices
+    if "body_foot_idx" in params:
+        lines.append(f"body_foot_idx = {params['body_foot_idx']};\n")
+    if "filler_tube_height" in params:
+        lines.append(f"filler_tube_height = {params['filler_tube_height']:.6f};\n")
 
     # Funnel parameters
     for key in ("funnel_wall_angle", "funnel_wall", "flange_width",

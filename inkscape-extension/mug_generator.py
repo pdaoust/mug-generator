@@ -189,11 +189,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         # Convert to mm — split closed profile at rim
         body_mm = svg_to_mm(mug_body_paths[0])
-        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
-        rim_z = mug_outer_mm[0][1]
-        inner_r = mug_inner_mm[0][0]
-        tube_top = rim_z + self.options.filler_tube_height
-        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+        body_profile, foot_idx = split_body_profile(body_mm)
+        mug_outer_mm = body_profile[:foot_idx + 1]
 
         # Build mug surface (outer profile — used for cylinder wrapping)
         mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
@@ -247,11 +244,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
             profile_paths = get_layer_paths(svg, "handle profile",
                                             max_seg_len=svg_handle_seg)
             body_mm = svg_to_mm(mug_body_paths[0])
-            mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
-            rim_z = mug_outer_mm[0][1]
-            inner_r = mug_inner_mm[0][0]
-            tube_top = rim_z + self.options.filler_tube_height
-            mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+            body_profile, foot_idx = split_body_profile(body_mm)
+            mug_outer_mm = body_profile[:foot_idx + 1]
             handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
             stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
@@ -281,26 +275,23 @@ class MugGeneratorEffect(inkex.EffectExtension):
             mug_body_paths = get_layer_paths(svg, "mug body",
                                              max_seg_len=svg_body_seg)
             body_mm = svg_to_mm(mug_body_paths[0])
-            mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
-            rim_z = mug_outer_mm[0][1]
-            inner_r = mug_inner_mm[0][0]
-            tube_top = rim_z + self.options.filler_tube_height
-            mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+            body_profile, foot_idx = split_body_profile(body_mm)
+            mug_outer_mm = body_profile[:foot_idx + 1]
 
         shrinkage_pct = self.options.clay_shrinkage
 
-        # Build mug profiles for OpenSCAD — raw polygon vertices in path
-        # order (not z-sorted).  X = radius from the document origin (mug axis).
+        # Build mug body profile for OpenSCAD — the full closed cross-section,
+        # reordered to start at the rim split point with outer side first.
         # Data is emitted at actual (fired) size; clay shrinkage scaling
         # is applied in the mould/funnel SCAD files.
-        scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
-        scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
+        scad_body_profile = [[p[0], p[1]] for p in body_profile]
         if handle_enabled:
             handle_stations_out = [
                 [[pt[0], pt[1], pt[2]] for pt in poly]
                 for poly in handle_stations_3d
             ]
             norm_profile = normalize_profile(handle_profile)
+            scad_outer_profile = scad_body_profile[:foot_idx + 1]
             handle_stations_out = nudge_handle_stations(
                 handle_stations_out, scad_outer_profile,
                 axis_x=mug_surface.axis_x,
@@ -365,8 +356,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         # Build output data
         data = {
-            "mug_outer_profile": scad_outer_profile,
-            "mug_inner_profile": scad_inner_profile,
+            "mug_body_profile": scad_body_profile,
             "handle_stations": handle_stations_out,
             "handle_path": handle_path_out,
             "mark_polygons": mark_polygons if mark_enabled else None,
@@ -375,6 +365,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "fa": self.options.fa,
                 "fs": self.options.fs,
                 "axis_x": mug_surface.axis_x,
+                "body_foot_idx": foot_idx,
+                "filler_tube_height": self.options.filler_tube_height,
                 "clay_shrinkage_pct": shrinkage_pct,
                 "handle_enabled": handle_enabled,
                 "mark_enabled": mark_enabled,
@@ -390,7 +382,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
         run_all_emitters(data, output_dir)
 
         # Compute funnel outline for preview (in mm, pre-clay-scaling)
-        funnel_outline_mm = self._funnel_outline(mug_outer_mm, mug_inner_mm)
+        inner_mm = body_profile[foot_idx:]
+        funnel_outline_mm = self._funnel_outline(mug_outer_mm, inner_mm)
 
         # Preview
         if self.options.preview:

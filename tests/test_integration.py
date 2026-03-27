@@ -48,12 +48,9 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
 
     mug_body_paths = get_layer_paths(svg_root, "mug body")
     body_mm = svg_to_mm(mug_body_paths[0])
-    mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
+    body_profile, foot_idx = split_body_profile(body_mm)
     filler_tube_height = 15.0
-    rim_z = mug_outer_mm[0][1]
-    inner_r = mug_inner_mm[0][0]
-    tube_top = rim_z + filler_tube_height
-    mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+    mug_outer_mm = body_profile[:foot_idx + 1]
 
     mug_surface = MugSurface([[p[0], p[1]] for p in mug_outer_mm])
 
@@ -106,11 +103,8 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         profile_paths = get_layer_paths(svg_root, "handle profile",
                                         max_seg_len=svg_handle_seg)
         body_mm = svg_to_mm(mug_body_paths[0])
-        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
-        rim_z = mug_outer_mm[0][1]
-        inner_r = mug_inner_mm[0][0]
-        tube_top = rim_z + filler_tube_height
-        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+        body_profile, foot_idx = split_body_profile(body_mm)
+        mug_outer_mm = body_profile[:foot_idx + 1]
         handle_profile = [(p[0], p[1]) for p in profile_paths[0]]
 
         stations = sample_rails(inner_rail_mm, outer_rail_mm, n_stations)
@@ -138,16 +132,13 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         mug_body_paths = get_layer_paths(svg_root, "mug body",
                                          max_seg_len=svg_body_seg)
         body_mm = svg_to_mm(mug_body_paths[0])
-        mug_outer_mm, mug_inner_mm = split_body_profile(body_mm)
-        rim_z = mug_outer_mm[0][1]
-        inner_r = mug_inner_mm[0][0]
-        tube_top = rim_z + filler_tube_height
-        mug_inner_mm = [(inner_r, tube_top)] + list(mug_inner_mm)
+        body_profile, foot_idx = split_body_profile(body_mm)
+        mug_outer_mm = body_profile[:foot_idx + 1]
 
     # Raw polygon vertices in path order — X = radius from document origin.
     # Data is at actual (fired) size; clay shrinkage scaling is in the SCAD files.
-    scad_outer_profile = [[p[0], p[1]] for p in mug_outer_mm]
-    scad_inner_profile = [[p[0], p[1]] for p in mug_inner_mm]
+    scad_body_profile = [[p[0], p[1]] for p in body_profile]
+    scad_outer_profile = scad_body_profile[:foot_idx + 1]
 
     # Extract maker's mark (optional layer)
     mark_raw = get_layer_mark_polygons(svg_root, "mark")
@@ -217,8 +208,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         handle_path_out = []
 
     data = {
-        "mug_outer_profile": scad_outer_profile,
-        "mug_inner_profile": scad_inner_profile,
+        "mug_body_profile": scad_body_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
         "handle_stations": handle_stations_out,
         "handle_path": handle_path_out,
@@ -227,6 +217,8 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             "fa": fa,
             "fs": fs,
             "axis_x": mug_surface.axis_x,
+            "body_foot_idx": foot_idx,
+            "filler_tube_height": filler_tube_height,
             "clay_shrinkage_pct": clay_shrinkage,
             "handle_enabled": handle_enabled,
             **mould_params,
@@ -242,8 +234,7 @@ class TestIntegration:
         """Run full pipeline and verify output files exist and parse correctly."""
         data = _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
 
-        assert (tmp_path / "mug_outer_profile.scad").exists()
-        assert (tmp_path / "mug_inner_profile.scad").exists()
+        assert (tmp_path / "mug_body_profile.scad").exists()
         assert (tmp_path / "handle_stations.scad").exists()
         assert (tmp_path / "handle_path.scad").exists()
         assert (tmp_path / "mug_params.scad").exists()
@@ -253,17 +244,11 @@ class TestIntegration:
     def test_mug_profiles_valid(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
 
-        outer_text = (tmp_path / "mug_outer_profile.scad").read_text()
-        outer = _parse_scad_array(outer_text, "mug_outer_profile")
-        assert len(outer) >= 2
-        for pt in outer:
-            assert pt[0] >= -0.01, f"Negative radius in outer: {pt}"
-
-        inner_text = (tmp_path / "mug_inner_profile.scad").read_text()
-        inner = _parse_scad_array(inner_text, "mug_inner_profile")
-        assert len(inner) >= 2
-        for pt in inner:
-            assert pt[0] >= -0.01, f"Negative radius in inner: {pt}"
+        body_text = (tmp_path / "mug_body_profile.scad").read_text()
+        body = _parse_scad_array(body_text, "mug_body_profile")
+        assert len(body) >= 4
+        for pt in body:
+            assert pt[0] >= -0.01, f"Negative radius in body profile: {pt}"
 
     def test_handle_stations_valid(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
@@ -305,7 +290,7 @@ class TestIntegration:
         data1 = _run_pipeline(FIXTURE_SVG, tmp_path / "run1", fn=20)
         data2 = _run_pipeline(FIXTURE_SVG, tmp_path / "run2", fn=20)
 
-        for p1, p2 in zip(data1["mug_outer_profile"], data2["mug_outer_profile"]):
+        for p1, p2 in zip(data1["mug_body_profile"], data2["mug_body_profile"]):
             assert p1 == pytest.approx(p2, abs=1e-6)
 
         for s1, s2 in zip(data1["handle_stations"], data2["handle_stations"]):
@@ -329,8 +314,8 @@ class TestIntegration:
                                 clay_shrinkage=10.0)
 
         # Profile data should be identical (actual size, not pre-scaled)
-        for p0, p10 in zip(data_no["mug_outer_profile"],
-                           data_10["mug_outer_profile"]):
+        for p0, p10 in zip(data_no["mug_body_profile"],
+                           data_10["mug_body_profile"]):
             assert p10[0] == pytest.approx(p0[0], abs=1e-6)
             assert p10[1] == pytest.approx(p0[1], abs=1e-6)
 
@@ -377,8 +362,7 @@ class TestIntegration:
         fixture = FIXTURE_SVG.parent / "sample_no_handle.svg"
         data = _run_pipeline(fixture, tmp_path, fn=20)
 
-        assert (tmp_path / "mug_outer_profile.scad").exists()
-        assert (tmp_path / "mug_inner_profile.scad").exists()
+        assert (tmp_path / "mug_body_profile.scad").exists()
         assert (tmp_path / "handle_stations.scad").exists()
         assert (tmp_path / "handle_path.scad").exists()
         assert (tmp_path / "mug_params.scad").exists()
@@ -397,13 +381,13 @@ class TestIntegration:
         assert "handle_path = []" in hp_text
 
     def test_no_handle_profiles_valid(self, tmp_path):
-        """Mug profiles are valid even without handle layers."""
+        """Mug body profile is valid even without handle layers."""
         fixture = FIXTURE_SVG.parent / "sample_no_handle.svg"
         _run_pipeline(fixture, tmp_path, fn=20)
 
-        outer_text = (tmp_path / "mug_outer_profile.scad").read_text()
-        outer = _parse_scad_array(outer_text, "mug_outer_profile")
-        assert len(outer) >= 2
+        body_text = (tmp_path / "mug_body_profile.scad").read_text()
+        body = _parse_scad_array(body_text, "mug_body_profile")
+        assert len(body) >= 4
 
     def test_handle_enabled_with_handle(self, tmp_path):
         """handle_enabled is true when all handle layers are present."""

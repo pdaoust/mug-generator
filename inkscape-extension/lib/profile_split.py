@@ -2,13 +2,16 @@
 
 
 def split_body_profile(path):
-    """Split a closed body profile at the rim into (outer, inner).
+    """Split a closed body profile at the rim.
 
     The profile is a closed polyline of (r, z) points tracing the full
     cross-section of a vessel (outer wall, over the rim, inner wall, floor).
 
-    Returns (outer, inner) where each is a list of (r, z) tuples starting
-    at the rim split point.
+    Returns (body, foot_idx) where:
+      - body: the profile reordered to start at the rim split point,
+        outer side first (split → outer wall → foot center → inner wall → rim)
+      - foot_idx: index of the foot center (r ≈ 0) point that separates
+        the outer side from the inner side
 
     Algorithm:
       1. Find the split point: vertex with max z, ties broken by max r.
@@ -71,6 +74,13 @@ def split_body_profile(path):
     area_b = swept_area(side_b)
 
     if area_a >= area_b:
-        return side_a, side_b
+        outer, inner = side_a, side_b
     else:
-        return side_b, side_a
+        outer, inner = side_b, side_a
+
+    # Build reordered profile: outer first, then inner (reversed, skip
+    # duplicate split point at inner[0])
+    body = list(outer) + list(reversed(inner[1:]))
+    foot_idx = len(outer) - 1
+
+    return body, foot_idx

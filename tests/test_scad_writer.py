@@ -19,8 +19,10 @@ def _parse_scad_array(text: str, var_name: str) -> list:
 def _base_data(**overrides):
     """Minimal valid data dict for all emitters."""
     d = {
-        "mug_outer_profile": [[0.0, 0.0], [30.0, 50.0], [35.0, 100.0]],
-        "mug_inner_profile": [[0.0, 3.0], [27.0, 50.0], [32.0, 97.0]],
+        "mug_body_profile": [
+            [35.0, 100.0], [35.0, 5.0], [30.0, 0.0],
+            [0.0, 0.0], [0.0, 8.0], [30.0, 8.0], [30.0, 97.0],
+        ],
         "handle_stations": [[[1, 2, 3], [4, 5, 6]]],
         "mug_params": {"fn": 0, "fa": 12, "fs": 2},
     }
@@ -29,23 +31,15 @@ def _base_data(**overrides):
 
 
 class TestScadWriter:
-    def test_mug_outer_profile(self, tmp_path):
+    def test_mug_body_profile(self, tmp_path):
         run_all_emitters(_base_data(), tmp_path)
 
-        text = (tmp_path / "mug_outer_profile.scad").read_text()
+        text = (tmp_path / "mug_body_profile.scad").read_text()
         assert "Auto-generated" in text
-        arr = _parse_scad_array(text, "mug_outer_profile")
-        assert len(arr) == 3
-        assert arr[0] == pytest.approx([0.0, 0.0], abs=1e-4)
-        assert arr[2] == pytest.approx([35.0, 100.0], abs=1e-4)
-
-    def test_mug_inner_profile(self, tmp_path):
-        run_all_emitters(_base_data(), tmp_path)
-
-        text = (tmp_path / "mug_inner_profile.scad").read_text()
-        arr = _parse_scad_array(text, "mug_inner_profile")
-        assert len(arr) == 3
-        assert arr[0] == pytest.approx([0.0, 3.0], abs=1e-4)
+        arr = _parse_scad_array(text, "mug_body_profile")
+        assert len(arr) == 7
+        assert arr[0] == pytest.approx([35.0, 100.0], abs=1e-4)
+        assert arr[3] == pytest.approx([0.0, 0.0], abs=1e-4)
 
     def test_handle_stations(self, tmp_path):
         stations = [
@@ -106,11 +100,21 @@ class TestScadWriter:
         assert "foot_concavity_z = 6" in text
         assert "foot_concavity_radius = 30" in text
 
-    def test_numeric_tolerance(self, tmp_path):
-        outer = [[12.3456789, 98.7654321], [0.001, 0.002]]
-        run_all_emitters(_base_data(mug_outer_profile=outer), tmp_path)
+    def test_body_foot_idx_and_tube_height(self, tmp_path):
+        run_all_emitters(_base_data(mug_params={
+            "fn": 0, "fa": 12, "fs": 2,
+            "body_foot_idx": 3,
+            "filler_tube_height": 15.0,
+        }), tmp_path)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "body_foot_idx = 3" in text
+        assert "filler_tube_height = 15" in text
 
-        text = (tmp_path / "mug_outer_profile.scad").read_text()
-        arr = _parse_scad_array(text, "mug_outer_profile")
-        assert arr[0] == pytest.approx(outer[0], abs=1e-4)
-        assert arr[1] == pytest.approx(outer[1], abs=1e-4)
+    def test_numeric_tolerance(self, tmp_path):
+        body = [[12.3456789, 98.7654321], [0.001, 0.002]]
+        run_all_emitters(_base_data(mug_body_profile=body), tmp_path)
+
+        text = (tmp_path / "mug_body_profile.scad").read_text()
+        arr = _parse_scad_array(text, "mug_body_profile")
+        assert arr[0] == pytest.approx(body[0], abs=1e-4)
+        assert arr[1] == pytest.approx(body[1], abs=1e-4)

@@ -8,33 +8,20 @@ include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
 
 include <mug_params.scad>
-include <mug_outer_profile.scad>
-include <mug_inner_profile.scad>
+include <mug_body_profile.scad>
 include <handle_stations.scad>
 include <mark_polygon.scad>
 
-// --- Mug body (outer minus inner, both drawn profiles) ---
+// --- Mug body (single closed cross-section, revolved) ---
 //
-// The profiles are closed polygons in the XZ half-plane (X = radius,
-// Z = height), passed in vertex order from the SVG paths.  OpenSCAD's
-// polygon() automatically closes last→first, and rotate_extrude()
-// sweeps around the Z axis.
-
-module mug_outer() {
-    rotate_extrude()
-        polygon(points = mug_outer_profile);
-}
-
-module mug_inner() {
-    rotate_extrude()
-        polygon(points = mug_inner_profile);
-}
+// The profile is a closed polygon in the XZ half-plane (X = radius,
+// Z = height), tracing outer wall → foot → floor → inner wall → rim.
+// OpenSCAD's polygon() automatically closes last→first, and
+// rotate_extrude() sweeps around the Z axis.
 
 module mug_body() {
-    difference() {
-        mug_outer();
-        mug_inner();
-    }
+    rotate_extrude()
+        polygon(points = mug_body_profile);
 }
 
 // --- Handle (lofted skin with endcaps) ---
@@ -43,10 +30,13 @@ module mug_body() {
 // caps=true lets BOSL2 triangulate and close the ends internally,
 // ensuring proper vertex sharing between skin walls and endcaps.
 
-// Interpolate mug outer radius at height z from the profile polygon.
+// Outer profile = points 0..body_foot_idx (for radius interpolation)
+_outer = [for (i = [0:body_foot_idx]) mug_body_profile[i]];
+
+// Interpolate mug outer radius at height z from the outer profile.
 function mug_r_at_z(z) =
     let(
-        prof = mug_outer_profile, n = len(prof),
+        prof = _outer, n = len(prof),
         results = [for (i = [0:n-1])
             let(j = (i + 1) % n,
                 z0 = prof[i][1], z1 = prof[j][1],
@@ -97,11 +87,10 @@ module handle() {
 
 // --- Maker's mark ---
 
-mug_min_z = min([for (p = mug_outer_profile) p[1]]);
+mug_min_z = min([for (p = _outer) p[1]]);
 
-// Z of the mug base centre (where the profile meets the Z axis
-// at the bottom — above mug_min_z for mugs with a foot ring).
-_mark_z = mug_outer_profile[0][1];
+// Z of the mug base centre (foot center on the axis).
+_mark_z = mug_body_profile[body_foot_idx][1];
 
 _mark_draft = mark_depth * tan(mark_draft_angle);
 _mark_half_draft = _mark_draft / 2;

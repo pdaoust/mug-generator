@@ -57,14 +57,7 @@ are supported.
       </label>
     </page>
 
-    <page name="settings" gui-text="Settings">
-      <param name="output_dir" type="path" mode="folder"
-             gui-text="Output folder"
-             gui-description="Directory for generated OpenSCAD files" />
-
-      <separator />
-      <label appearance="header">Quality</label>
-
+    <page name="quality" gui-text="Quality">
       <param name="fn" type="int" min="0" max="360" gui-text="Number of facets (0=auto)"
              gui-description="Fixed number of segments for body and handle (same as OpenSCAD's $fn variable, overrides min angle and min size when > 0). Larger values take more time to render. Use 50 for prototyping and 200 for production.">0</param>
       <param name="fa" type="float" min="0.1" max="180" precision="1"
@@ -76,13 +69,9 @@ are supported.
       <param name="mark_layer_height" type="float" min="0.05" max="1.0" precision="2"
              gui-text="Layer height (mm)"
              gui-description="Height of your 3D printer's layer settings. This gets used in the maker's mark, which is composed of successively larger extruded slices stacked on top of each other to simulate a bevel. Smaller values give smoother sides but slower renders.">0.20</param>
+    </page>
 
-      <separator />
-      <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>
-
-      <separator />
-      <label appearance="header">Case mould</label>
-
+    <page name="case-mould" gui-text="Case mould">
       <param name="plaster_thickness" type="float" min="20" max="100" precision="1"
              gui-text="Plaster mould thickness (mm)"
              gui-description="Thickness of plaster around the mug body. 25 to 35 mm recommended.">30.0</param>
@@ -95,10 +84,9 @@ are supported.
       <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
              gui-text="Filler tube height (mm)"
              gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>
+    </page>
 
-      <separator />
-      <label appearance="header">Pouring funnel</label>
-
+    <page name="pouring-funnel" gui-text="Pouring funnel">
       <param name="funnel_wall_angle" type="float" min="10" max="60" precision="1"
              gui-text="Funnel wall angle (°)"
              gui-description="Cone wall angle from vertical">30.0</param>
@@ -114,22 +102,25 @@ are supported.
       <param name="breather_hole_count" type="int" min="2" max="24"
              gui-text="Breather hole count"
              gui-description="Number of breather holes around the lip form">6</param>
+    </page>
 
-      <separator />
-      <label appearance="header">Clay shrinkage</label>
-
-      <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
-             gui-text="Clay shrinkage (%)"
-             gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>
-
-      <separator />
-      <label appearance="header">Maker's mark</label>
+    <page name="makers-mark" gui-text="Maker's mark">
       <param name="mark_depth" type="float" min="0.1" max="5.0" precision="1"
              gui-text="Mark depth (mm)">1.0</param>
       <param name="mark_inset" type="bool"
              gui-text="Inset (debossed)">true</param>
       <param name="mark_draft_angle" type="float" min="0" max="60" precision="1"
              gui-text="Mark draft angle (°)" gui-description="The angle of the side walls of the embossed or debossed maker's mark.">45.0</param>
+    </page>
+
+    <page name="export" gui-text="Export">
+      <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
+             gui-text="Clay shrinkage (%)"
+             gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>
+      <param name="output_dir" type="path" mode="folder"
+             gui-text="Output folder"
+             gui-description="Directory for generated OpenSCAD files" />
+      <param name="preview" type="bool" gui-text="Draw preview in SVG">true</param>
     </page>
 
   </param>

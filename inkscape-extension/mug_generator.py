@@ -47,6 +47,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--preview", type=inkex.Boolean, default=True)
         pars.add_argument("--plaster_thickness", type=float, default=30.0)
         pars.add_argument("--wall_thickness", type=float, default=0.8)
+        pars.add_argument("--alignment_type", type=str, default="natches")
         pars.add_argument("--natch_radius", type=float, default=6.75)
         pars.add_argument("--filler_tube_height", type=float, default=15.0)
         pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
@@ -335,6 +336,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Detect foot concavity for mould type
         concavity = mug_surface.detect_foot_concavity()
         mould_params = {
+            "alignment_type": self.options.alignment_type,
             "plaster_thickness": self.options.plaster_thickness,
             "wall_thickness": self.options.wall_thickness,
             "natch_radius": self.options.natch_radius,

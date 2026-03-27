@@ -78,9 +78,15 @@ are supported.
       <param name="wall_thickness" type="float" min="0.4" max="5.0" precision="1"
              gui-text="Case mould wall (mm)"
              gui-description="Thickness of the printed case mould shell. Make this a multiple of your nozzle width — 0.8mm is a good value.">0.8</param>
+      <param name="alignment_type" type="optiongroup" appearance="combo"
+             gui-text="Alignment type"
+             gui-description="How mould parts align: natch holes for separate alignment hardware, or integrated keys printed into the mould.">
+        <option value="natches">Natch holes</option>
+        <option value="keys">Integrated keys</option>
+      </param>
       <param name="natch_radius" type="float" min="3.0" max="20.0" precision="2"
-             gui-text="Natch hole radius (mm)"
-             gui-description="Radius of alignment natch holes between mould parts. Use 6.75 for Tony Hansen's 3D printed natch system.">6.75</param>
+             gui-text="Natch/key radius (mm)"
+             gui-description="Radius of alignment natches or integrated keys between mould parts. Use 6.75 for Tony Hansen's 3D printed natch system.">6.75</param>
       <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
              gui-text="Filler tube height (mm)"
              gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>

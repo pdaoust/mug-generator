@@ -165,6 +165,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     # Detect foot concavity for mould type
     concavity = mug_surface.detect_foot_concavity()
     mould_params = {
+        "alignment_type": "natches",
         "plaster_thickness": 30.0,
         "wall_thickness": 0.8,
         "natch_radius": 6.75,

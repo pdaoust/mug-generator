@@ -68,6 +68,8 @@ mug_max_radius = max([for (p = _outer) p[0]]);
 mug_max_z = max([for (p = _outer) p[1]]);
 mug_min_z = min([for (p = _outer) p[1]]);
 
+_use_keys = (alignment_type == "keys");
+
 inner_top_z = _tube_top_z;
 handle_max_y = handle_enabled
     ? max([for (s = _hstations) for (p = s) abs(p[1])])
@@ -311,10 +313,20 @@ module clip_z_below(z) { translate([0, 0, z - 500]) cube(1000, center = true); }
 // SEAM FLOORS
 // =====================================================================
 
+// Seam floor thickness: when using integrated keys, the side that
+// receives sockets (B for Y-seam, upper halves for Z-seam) needs
+// extra thickness so the hemisphere doesn't punch through.
+_y_seam_thickness = _use_keys
+    ? 2 * (wall_thickness + natch_radius)
+    : 2 * wall_thickness;
+_z_seam_thickness = _use_keys
+    ? wall_thickness + natch_radius
+    : wall_thickness;
+
 module y_seam_floor(pos_y) {
     intersection() {
         rotate([90, 0, 0])
-            linear_extrude(height = 2 * wall_thickness, center = true)
+            linear_extrude(height = _y_seam_thickness, center = true)
                 mould_outer_hull_2d();
         if (pos_y) clip_y_neg(); else clip_y_pos();
     }
@@ -323,8 +335,8 @@ module y_seam_floor(pos_y) {
 module z_seam_floor(z_split) {
     intersection() {
         full_outer_hull();
-        translate([0, 0, z_split + wall_thickness / 2])
-            cube([2000, 2000, wall_thickness], center = true);
+        translate([0, 0, z_split + _z_seam_thickness / 2])
+            cube([2000, 2000, _z_seam_thickness], center = true);
     }
 }
 
@@ -348,7 +360,7 @@ module case_half(pos_y) {
     }
 }
 
-// --- Seam natch holes (on the Y=0 plane) ---
+// --- Seam alignment (on the Y=0 plane) ---
 _natch_mid_z = (mug_max_z + mug_min_z) / 2;
 _mug_r_at_natch_z = handle_enabled
     ? mug_r_at_z(handle_outer_centroid[2])
@@ -360,6 +372,7 @@ natch_1_z = handle_enabled ? handle_outer_centroid[2] : _natch_mid_z;
 natch_2_x = -(_mug_r_at_natch_z + plaster_thickness / 2);
 natch_2_z = natch_1_z;
 
+// Natch holes (cylindrical, for separate alignment hardware)
 module seam_natch(pos) {
     translate(pos)
         rotate([90, 0, 0])
@@ -372,17 +385,44 @@ module seam_natches() {
     seam_natch([natch_2_x, 0, natch_2_z]);
 }
 
-module case_half_a() {
+// Integrated keys (hemisphere bumps/sockets)
+module _hemisphere(r) {
     difference() {
-        case_half(true);
-        seam_natches();
+        sphere(r = r, $fn = 32);
+        translate([0, 0, -r]) cube(2 * r, center = true);
+    }
+}
+
+module seam_keys(pos) {
+    // Hemisphere dome pointing in -Y (from A into B)
+    translate(pos)
+        rotate([90, 0, 0])
+            _hemisphere(natch_radius);
+}
+
+module seam_keys_all() {
+    seam_keys([natch_1_x, 0, natch_1_z]);
+    seam_keys([natch_2_x, 0, natch_2_z]);
+}
+
+module case_half_a() {
+    if (_use_keys) {
+        union() {
+            case_half(true);
+            seam_keys_all();
+        }
+    } else {
+        difference() {
+            case_half(true);
+            seam_natches();
+        }
     }
 }
 
 module case_half_b() {
     difference() {
         case_half(false);
-        seam_natches();
+        _use_keys ? seam_keys_all() : seam_natches();
     }
 }
 
@@ -453,11 +493,12 @@ module case_base_part() {
     }
 }
 
-// --- Base natch holes ---
+// --- Base alignment ---
 _base_natch_max_r = mug_r_at_z(_foot_z);
 _base_natch_alt_y = (_base_natch_max_r + _base_y_half) / 2;
 base_natch_y = max(_base_natch_max_r + 5 + natch_radius, _base_natch_alt_y);
 
+// Natch holes (cylindrical)
 module base_natch(y_pos) {
     translate([0, y_pos, _foot_z])
         cylinder(r = natch_radius, h = natch_radius * 2,
@@ -469,26 +510,51 @@ module base_natches() {
     base_natch(-base_natch_y);
 }
 
+// Integrated keys (hemisphere bumps on base top, sockets in upper halves)
+module base_keys_all() {
+    translate([0, base_natch_y, _foot_z])
+        _hemisphere(natch_radius);
+    translate([0, -base_natch_y, _foot_z])
+        _hemisphere(natch_radius);
+}
+
 module case_3part_half_a() {
-    difference() {
-        case_upper_half(true);
-        seam_natches();
-        base_natches();
+    if (_use_keys) {
+        difference() {
+            union() {
+                case_upper_half(true);
+                seam_keys_all();
+            }
+            base_keys_all();
+        }
+    } else {
+        difference() {
+            case_upper_half(true);
+            seam_natches();
+            base_natches();
+        }
     }
 }
 
 module case_3part_half_b() {
     difference() {
         case_upper_half(false);
-        seam_natches();
-        base_natches();
+        _use_keys ? seam_keys_all() : seam_natches();
+        _use_keys ? base_keys_all() : base_natches();
     }
 }
 
 module case_base() {
-    difference() {
-        case_base_part();
-        base_natches();
+    if (_use_keys) {
+        union() {
+            case_base_part();
+            base_keys_all();
+        }
+    } else {
+        difference() {
+            case_base_part();
+            base_natches();
+        }
     }
 }
 

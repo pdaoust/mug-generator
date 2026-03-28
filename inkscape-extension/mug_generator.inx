@@ -87,6 +87,9 @@ are supported.
       <param name="natch_radius" type="float" min="3.0" max="20.0" precision="2"
              gui-text="Natch/key radius (mm)"
              gui-description="Radius of alignment natches or integrated keys between mould parts. Use 6.75 for Tony Hansen's 3D printed natch system.">6.75</param>
+      <param name="key_tolerance" type="float" min="0.0" max="2.0" precision="2"
+             gui-text="Key tolerance (mm)"
+             gui-description="Total clearance between integrated key bumps and sockets. Half is subtracted from bumps, half added to sockets. Only used with integrated keys.">0.50</param>
       <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
              gui-text="Filler tube height (mm)"
              gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>

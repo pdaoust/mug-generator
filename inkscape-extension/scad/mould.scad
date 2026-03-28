@@ -69,6 +69,9 @@ mug_max_z = max([for (p = _outer) p[1]]);
 mug_min_z = min([for (p = _outer) p[1]]);
 
 _use_keys = (alignment_type == "keys");
+_key_tol_half = _use_keys ? key_tolerance / 2 : 0;
+_key_r_bump   = natch_radius - _key_tol_half;
+_key_r_socket = natch_radius + _key_tol_half;
 
 inner_top_z = _tube_top_z;
 handle_max_y = handle_enabled
@@ -320,7 +323,7 @@ module y_seam_floor(pos_y) {
     // Part B with keys needs a thicker floor so the hemisphere
     // sockets are fully enclosed.
     _ysf_thick = (_use_keys && !pos_y)
-        ? 2 * (wall_thickness + natch_radius)
+        ? 2 * (wall_thickness + _key_r_socket)
         : _y_seam_thickness;
     intersection() {
         rotate([90, 0, 0])
@@ -341,9 +344,9 @@ module z_seam_floor(z_split) {
     // full diameter is visible from the cavity side.
     if (_use_keys) {
         translate([0, base_natch_y, z_split + _z_seam_thickness])
-            _hemisphere(natch_radius + wall_thickness);
+            _hemisphere(_key_r_socket + wall_thickness);
         translate([0, -base_natch_y, z_split + _z_seam_thickness])
-            _hemisphere(natch_radius + wall_thickness);
+            _hemisphere(_key_r_socket + wall_thickness);
     }
 }
 
@@ -400,24 +403,35 @@ module _hemisphere(r) {
     }
 }
 
-module seam_keys(pos) {
-    // Hemisphere dome pointing +Y (into the plaster cavity).
-    // Part A unions these as bumps; Part B subtracts for sockets.
+// Integrated keys — bump variant (male, unioned onto Part A)
+module seam_key_bump(pos) {
     translate(pos)
         rotate([-90, 0, 0])
-            _hemisphere(natch_radius);
+            _hemisphere(_key_r_bump);
 }
 
-module seam_keys_all() {
-    seam_keys([natch_1_x, 0, natch_1_z]);
-    seam_keys([natch_2_x, 0, natch_2_z]);
+module seam_keys_bumps() {
+    seam_key_bump([natch_1_x, 0, natch_1_z]);
+    seam_key_bump([natch_2_x, 0, natch_2_z]);
+}
+
+// Integrated keys — socket variant (female, subtracted from Part B)
+module seam_key_socket(pos) {
+    translate(pos)
+        rotate([-90, 0, 0])
+            _hemisphere(_key_r_socket);
+}
+
+module seam_keys_sockets() {
+    seam_key_socket([natch_1_x, 0, natch_1_z]);
+    seam_key_socket([natch_2_x, 0, natch_2_z]);
 }
 
 module case_half_a() {
     if (_use_keys) {
         union() {
             case_half(true);
-            seam_keys_all();
+            seam_keys_bumps();
         }
     } else {
         difference() {
@@ -430,7 +444,7 @@ module case_half_a() {
 module case_half_b() {
     difference() {
         case_half(false);
-        if (_use_keys) seam_keys_all(); else seam_natches();
+        if (_use_keys) seam_keys_sockets(); else seam_natches();
     }
 }
 
@@ -523,18 +537,18 @@ module base_natches() {
 // flip they point +Z and engage with the upper-half sockets.
 module base_keys_bumps() {
     translate([0, base_natch_y, _foot_z])
-        rotate([180, 0, 0]) _hemisphere(natch_radius);
+        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
     translate([0, -base_natch_y, _foot_z])
-        rotate([180, 0, 0]) _hemisphere(natch_radius);
+        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
 }
 
 // Upper-half sockets point +Z, resting on the inner surface of the
 // z_seam_floor so the full diameter is visible from the cavity.
 module base_keys_sockets() {
     translate([0, base_natch_y, _foot_z + _z_seam_thickness])
-        _hemisphere(natch_radius);
+        _hemisphere(_key_r_socket);
     translate([0, -base_natch_y, _foot_z + _z_seam_thickness])
-        _hemisphere(natch_radius);
+        _hemisphere(_key_r_socket);
 }
 
 module case_3part_half_a() {
@@ -542,7 +556,7 @@ module case_3part_half_a() {
         difference() {
             union() {
                 case_upper_half(true);
-                seam_keys_all();
+                seam_keys_bumps();
             }
             base_keys_sockets();
         }
@@ -559,7 +573,7 @@ module case_3part_half_b() {
     if (_use_keys) {
         difference() {
             case_upper_half(false);
-            seam_keys_all();
+            seam_keys_sockets();
             base_keys_sockets();
         }
     } else {

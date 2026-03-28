@@ -126,6 +126,15 @@ class TestScadWriter:
         text = (tmp_path / "mug_params.scad").read_text()
         assert 'alignment_type = "keys"' in text
 
+    def test_key_tolerance(self, tmp_path):
+        run_all_emitters(_base_data(mug_params={
+            "fn": 0, "fa": 12, "fs": 2,
+            "alignment_type": "keys", "natch_radius": 6.75,
+            "key_tolerance": 0.50,
+        }), tmp_path)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "key_tolerance = 0.5" in text
+
     def test_numeric_tolerance(self, tmp_path):
         body = [[12.3456789, 98.7654321], [0.001, 0.002]]
         run_all_emitters(_base_data(mug_body_profile=body), tmp_path)

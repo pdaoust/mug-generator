@@ -129,7 +129,8 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     # Mould parameters
     if "alignment_type" in params:
         lines.append(f'alignment_type = "{params["alignment_type"]}";\n')
-    for key in ("plaster_thickness", "wall_thickness", "natch_radius"):
+    for key in ("plaster_thickness", "wall_thickness", "natch_radius",
+                 "key_tolerance"):
         if key in params:
             lines.append(f"{key} = {params[key]:.6f};\n")
 

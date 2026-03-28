@@ -85,7 +85,7 @@ mould_y_half = max(mug_max_radius, handle_max_y) + plaster_thickness;
 
 // Mug body: just revolve the closed cross-section.
 module mug_body() {
-    rotate_extrude() polygon(points = _body);
+    rotate_extrude(convexity = 4) polygon(points = _body);
 }
 
 // --- Maker's mark stamp ---
@@ -110,7 +110,7 @@ module mark_stamp() {
         for (i = [0:_mark_slices - 1]) {
             _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
             translate([0, 0, i * _dz])
-                linear_extrude(height = _dz + 0.001)
+                linear_extrude(height = _dz + 0.001, convexity = 4)
                     offset(r = _r)
                         polygon(points = _mpoints, paths = mark_paths);
         }
@@ -119,7 +119,7 @@ module mark_stamp() {
 
 // Solid mould positive: revolve the mould profile (outer + tube, no inner).
 module _mug_solid_raw() {
-    rotate_extrude() polygon(points = _mould_profile);
+    rotate_extrude(convexity = 4) polygon(points = _mould_profile);
 }
 
 module mug_solid() {
@@ -293,13 +293,13 @@ _full_y = 2 * (mould_y_half + wall_thickness);
 
 module full_walls() {
     rotate([90, 0, 0])
-        linear_extrude(height = _full_y, center = true)
+        linear_extrude(height = _full_y, center = true, convexity = 4)
             mould_wall_ring_2d();
 }
 
 module full_outer_hull() {
     rotate([90, 0, 0])
-        linear_extrude(height = _full_y, center = true)
+        linear_extrude(height = _full_y, center = true, convexity = 4)
             mould_outer_hull_2d();
 }
 
@@ -327,7 +327,7 @@ module y_seam_floor(pos_y) {
         : _y_seam_thickness;
     intersection() {
         rotate([90, 0, 0])
-            linear_extrude(height = _ysf_thick, center = true)
+            linear_extrude(height = _ysf_thick, center = true, convexity = 4)
                 mould_outer_hull_2d();
         if (pos_y) clip_y_neg(); else clip_y_pos();
     }

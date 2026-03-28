@@ -313,20 +313,18 @@ module clip_z_below(z) { translate([0, 0, z - 500]) cube(1000, center = true); }
 // SEAM FLOORS
 // =====================================================================
 
-// Seam floor thickness: when using integrated keys, the side that
-// receives sockets (B for Y-seam, upper halves for Z-seam) needs
-// extra thickness so the hemisphere doesn't punch through.
-_y_seam_thickness = _use_keys
-    ? 2 * (wall_thickness + natch_radius)
-    : 2 * wall_thickness;
-_z_seam_thickness = _use_keys
-    ? wall_thickness + natch_radius
-    : wall_thickness;
+_y_seam_thickness = 2 * wall_thickness;
+_z_seam_thickness = wall_thickness;
 
 module y_seam_floor(pos_y) {
+    // Part B with keys needs a thicker floor so the hemisphere
+    // sockets are fully enclosed.
+    _ysf_thick = (_use_keys && !pos_y)
+        ? 2 * (wall_thickness + natch_radius)
+        : _y_seam_thickness;
     intersection() {
         rotate([90, 0, 0])
-            linear_extrude(height = _y_seam_thickness, center = true)
+            linear_extrude(height = _ysf_thick, center = true)
                 mould_outer_hull_2d();
         if (pos_y) clip_y_neg(); else clip_y_pos();
     }
@@ -337,6 +335,15 @@ module z_seam_floor(z_split) {
         full_outer_hull();
         translate([0, 0, z_split + _z_seam_thickness / 2])
             cube([2000, 2000, _z_seam_thickness], center = true);
+    }
+    // When using keys, add hemisphere backing pads at each base-key
+    // position, resting on the inner surface of the floor so the
+    // full diameter is visible from the cavity side.
+    if (_use_keys) {
+        translate([0, base_natch_y, z_split + _z_seam_thickness])
+            _hemisphere(natch_radius + wall_thickness);
+        translate([0, -base_natch_y, z_split + _z_seam_thickness])
+            _hemisphere(natch_radius + wall_thickness);
     }
 }
 
@@ -394,9 +401,10 @@ module _hemisphere(r) {
 }
 
 module seam_keys(pos) {
-    // Hemisphere dome pointing in -Y (from A into B)
+    // Hemisphere dome pointing +Y (into the plaster cavity).
+    // Part A unions these as bumps; Part B subtracts for sockets.
     translate(pos)
-        rotate([90, 0, 0])
+        rotate([-90, 0, 0])
             _hemisphere(natch_radius);
 }
 
@@ -422,7 +430,7 @@ module case_half_a() {
 module case_half_b() {
     difference() {
         case_half(false);
-        _use_keys ? seam_keys_all() : seam_natches();
+        if (_use_keys) seam_keys_all(); else seam_natches();
     }
 }
 
@@ -510,11 +518,22 @@ module base_natches() {
     base_natch(-base_natch_y);
 }
 
-// Integrated keys (hemisphere bumps on base top, sockets in upper halves)
-module base_keys_all() {
+// Integrated keys (base ↔ upper halves at _foot_z)
+// Base bumps point -Z (into the base interior); after the 180° print
+// flip they point +Z and engage with the upper-half sockets.
+module base_keys_bumps() {
     translate([0, base_natch_y, _foot_z])
-        _hemisphere(natch_radius);
+        rotate([180, 0, 0]) _hemisphere(natch_radius);
     translate([0, -base_natch_y, _foot_z])
+        rotate([180, 0, 0]) _hemisphere(natch_radius);
+}
+
+// Upper-half sockets point +Z, resting on the inner surface of the
+// z_seam_floor so the full diameter is visible from the cavity.
+module base_keys_sockets() {
+    translate([0, base_natch_y, _foot_z + _z_seam_thickness])
+        _hemisphere(natch_radius);
+    translate([0, -base_natch_y, _foot_z + _z_seam_thickness])
         _hemisphere(natch_radius);
 }
 
@@ -525,7 +544,7 @@ module case_3part_half_a() {
                 case_upper_half(true);
                 seam_keys_all();
             }
-            base_keys_all();
+            base_keys_sockets();
         }
     } else {
         difference() {
@@ -537,10 +556,18 @@ module case_3part_half_a() {
 }
 
 module case_3part_half_b() {
-    difference() {
-        case_upper_half(false);
-        _use_keys ? seam_keys_all() : seam_natches();
-        _use_keys ? base_keys_all() : base_natches();
+    if (_use_keys) {
+        difference() {
+            case_upper_half(false);
+            seam_keys_all();
+            base_keys_sockets();
+        }
+    } else {
+        difference() {
+            case_upper_half(false);
+            seam_natches();
+            base_natches();
+        }
     }
 }
 
@@ -548,7 +575,7 @@ module case_base() {
     if (_use_keys) {
         union() {
             case_base_part();
-            base_keys_all();
+            base_keys_bumps();
         }
     } else {
         difference() {

@@ -339,14 +339,13 @@ module z_seam_floor(z_split) {
         translate([0, 0, z_split + _z_seam_thickness / 2])
             cube([2000, 2000, _z_seam_thickness], center = true);
     }
-    // When using keys, add hemisphere backing pads at each base-key
-    // position, resting on the inner surface of the floor so the
-    // full diameter is visible from the cavity side.
+    // Backing shells so the base_keys_bumps() subtraction has
+    // material to carve into on the upper-half sidewalls.
     if (_use_keys) {
         translate([0, base_natch_y, z_split + _z_seam_thickness])
-            _hemisphere(_key_r_socket + wall_thickness);
+            rotate([180, 0, 0]) _hemisphere(_key_r_bump + wall_thickness);
         translate([0, -base_natch_y, z_split + _z_seam_thickness])
-            _hemisphere(_key_r_socket + wall_thickness);
+            rotate([180, 0, 0]) _hemisphere(_key_r_bump + wall_thickness);
     }
 }
 
@@ -403,19 +402,7 @@ module _hemisphere(r) {
     }
 }
 
-// Integrated keys — bump variant (male, unioned onto Part A)
-module seam_key_bump(pos) {
-    translate(pos)
-        rotate([-90, 0, 0])
-            _hemisphere(_key_r_bump);
-}
-
-module seam_keys_bumps() {
-    seam_key_bump([natch_1_x, 0, natch_1_z]);
-    seam_key_bump([natch_2_x, 0, natch_2_z]);
-}
-
-// Integrated keys — socket variant (female, subtracted from Part B)
+// Integrated keys — socket (unioned onto case → negative in plaster)
 module seam_key_socket(pos) {
     translate(pos)
         rotate([-90, 0, 0])
@@ -427,11 +414,23 @@ module seam_keys_sockets() {
     seam_key_socket([natch_2_x, 0, natch_2_z]);
 }
 
+// Integrated keys — bump (subtracted from case → positive in plaster)
+module seam_key_bump(pos) {
+    translate(pos)
+        rotate([-90, 0, 0])
+            _hemisphere(_key_r_bump);
+}
+
+module seam_keys_bumps() {
+    seam_key_bump([natch_1_x, 0, natch_1_z]);
+    seam_key_bump([natch_2_x, 0, natch_2_z]);
+}
+
 module case_half_a() {
     if (_use_keys) {
         union() {
             case_half(true);
-            seam_keys_bumps();
+            seam_keys_sockets();
         }
     } else {
         difference() {
@@ -444,7 +443,7 @@ module case_half_a() {
 module case_half_b() {
     difference() {
         case_half(false);
-        if (_use_keys) seam_keys_sockets(); else seam_natches();
+        if (_use_keys) seam_keys_bumps(); else seam_natches();
     }
 }
 
@@ -533,22 +532,22 @@ module base_natches() {
 }
 
 // Integrated keys (base ↔ upper halves at _foot_z)
-// Base bumps point -Z (into the base interior); after the 180° print
-// flip they point +Z and engage with the upper-half sockets.
-module base_keys_bumps() {
+// Sockets: unioned onto case → negative in plaster.
+// Used on the base part; points -Z into its cavity.
+module base_keys_sockets() {
     translate([0, base_natch_y, _foot_z])
-        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
+        rotate([180, 0, 0]) _hemisphere(_key_r_socket);
     translate([0, -base_natch_y, _foot_z])
-        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
+        rotate([180, 0, 0]) _hemisphere(_key_r_socket);
 }
 
-// Upper-half sockets point +Z, resting on the inner surface of the
-// z_seam_floor so the full diameter is visible from the cavity.
-module base_keys_sockets() {
+// Bumps: subtracted from case → positive in plaster.
+// Used on upper halves; points -Z, embedded in z_seam_floor.
+module base_keys_bumps() {
     translate([0, base_natch_y, _foot_z + _z_seam_thickness])
-        _hemisphere(_key_r_socket);
+        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
     translate([0, -base_natch_y, _foot_z + _z_seam_thickness])
-        _hemisphere(_key_r_socket);
+        rotate([180, 0, 0]) _hemisphere(_key_r_bump);
 }
 
 module case_3part_half_a() {
@@ -556,9 +555,9 @@ module case_3part_half_a() {
         difference() {
             union() {
                 case_upper_half(true);
-                seam_keys_bumps();
+                seam_keys_sockets();
             }
-            base_keys_sockets();
+            base_keys_bumps();
         }
     } else {
         difference() {
@@ -573,8 +572,8 @@ module case_3part_half_b() {
     if (_use_keys) {
         difference() {
             case_upper_half(false);
-            seam_keys_sockets();
-            base_keys_sockets();
+            seam_keys_bumps();
+            base_keys_bumps();
         }
     } else {
         difference() {
@@ -589,7 +588,7 @@ module case_base() {
     if (_use_keys) {
         union() {
             case_base_part();
-            base_keys_bumps();
+            base_keys_sockets();
         }
     } else {
         difference() {

@@ -342,10 +342,15 @@ module z_seam_floor(z_split) {
     // Backing shells so the base_keys_bumps() subtraction has
     // material to carve into on the upper-half sidewalls.
     if (_use_keys) {
-        translate([0, base_natch_y, z_split + _z_seam_thickness])
-            rotate([180, 0, 0]) _hemisphere(_key_r_bump + wall_thickness);
-        translate([0, -base_natch_y, z_split + _z_seam_thickness])
-            rotate([180, 0, 0]) _hemisphere(_key_r_bump + wall_thickness);
+        _bsr = _key_r_bump + wall_thickness;
+        translate([0, base_natch_y, z_split + _z_seam_thickness + 0.01]) {
+            rotate([180, 0, 0]) _hemisphere(_bsr);
+            _teardrop_cone(_bsr, [90, 180, 0]);
+        }
+        translate([0, -base_natch_y, z_split + _z_seam_thickness + 0.01]) {
+            rotate([180, 0, 0]) _hemisphere(_bsr);
+            _teardrop_cone(_bsr, [-90, 180, 0]);
+        }
     }
 }
 
@@ -399,6 +404,19 @@ module _hemisphere(r) {
     difference() {
         sphere(r = r, $fn = 32);
         translate([0, 0, -r]) cube(2 * r, center = true);
+    }
+}
+
+// Teardrop half-cone: 45° cone that extends beyond the hemisphere,
+// sliced to the z ≤ 0 half (matching the hemisphere dome after
+// rotate([180,0,0])).  rot orients the cone before slicing.
+module _teardrop_cone(r, rot) {
+    _cr = sin(45) * r;
+    intersection() {
+        rotate(rot)
+            translate([0, 0, _cr])
+                cylinder(h = _cr, r1 = _cr, r2 = 0, $fn = 32);
+        translate([0, 0, -500 + 0.005]) cube(1000, center = true);
     }
 }
 
@@ -532,22 +550,30 @@ module base_natches() {
 }
 
 // Integrated keys (base ↔ upper halves at _foot_z)
-// Sockets: unioned onto case → negative in plaster.
-// Used on the base part; points -Z into its cavity.
+// Sockets: unioned onto base case → negative in plaster.
+// Hemisphere dome -Z; teardrop cone toward Y=0 (inward on base, down on A/B).
 module base_keys_sockets() {
-    translate([0, base_natch_y, _foot_z])
+    translate([0, base_natch_y, _foot_z]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_socket);
-    translate([0, -base_natch_y, _foot_z])
+        _teardrop_cone(_key_r_socket, [90, 0, 0]);
+    }
+    translate([0, -base_natch_y, _foot_z]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_socket);
+        _teardrop_cone(_key_r_socket, [-90, 0, 0]);
+    }
 }
 
-// Bumps: subtracted from case → positive in plaster.
-// Used on upper halves; points -Z, embedded in z_seam_floor.
+// Bumps: subtracted from upper-half case → positive in plaster.
+// Hemisphere dome -Z; teardrop cone away from Y=0 (down on A/B print orientation).
 module base_keys_bumps() {
-    translate([0, base_natch_y, _foot_z + _z_seam_thickness])
+    translate([0, base_natch_y, _foot_z + _z_seam_thickness + 0.01]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_bump);
-    translate([0, -base_natch_y, _foot_z + _z_seam_thickness])
+        _teardrop_cone(_key_r_bump, [90, 180, 0]);
+    }
+    translate([0, -base_natch_y, _foot_z + _z_seam_thickness + 0.01]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_bump);
+        _teardrop_cone(_key_r_bump, [-90, 180, 0]);
+    }
 }
 
 module case_3part_half_a() {

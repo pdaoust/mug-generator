@@ -120,6 +120,12 @@ are supported.
              gui-text="Inset (debossed)">true</param>
       <param name="mark_draft_angle" type="float" min="0" max="60" precision="1"
              gui-text="Mark draft angle (°)" gui-description="The angle of the side walls of the embossed or debossed maker's mark.">45.0</param>
+      <param name="mark_fs" type="float" min="0.05" max="2.0" precision="2"
+             gui-text="Mark resolution (mm)"
+             gui-description="Maximum chord length when flattening curves in the maker's mark. Smaller values give smoother curves but more polygons. Also controls arc resolution on offset operations.">0.25</param>
+      <param name="mark_fa" type="float" min="1" max="30" precision="1"
+             gui-text="Mark min angle (°)"
+             gui-description="Minimum angle per arc segment in offset operations on the maker's mark.">12.0</param>
     </page>
 
     <page name="export" gui-text="Export">

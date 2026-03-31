@@ -10,11 +10,15 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
+include <BOSL2/rounding.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
 include <handle_stations.scad>
 include <mark_polygon.scad>
+
+// Profiling gate — override with -D '_profile_module="name"' on the CLI.
+_profile_module = is_undef(_profile_module) ? "" : _profile_module;
 
 // --- Render control ---
 render_part = "all";   // "all", "half_a", "half_b", "base"
@@ -99,21 +103,40 @@ _mark_z = mark_inset
     : max(_foot_roof_z_mould);
 
 _mark_draft = _mark_depth * tan(mark_draft_angle);
-_mark_half_draft = _mark_draft / 2;
 _mark_slices = mark_draft_angle > 0
     ? max(2, round(_mark_depth / mark_layer_height))
     : 1;
 
+// Convert flat points/paths into a BOSL2 region (list of paths).
+_mark_region_mould = [for (p = mark_paths) [for (i = p) _mpoints[i]]];
+
 module mark_stamp() {
+    // $fn = 0 so mark_fa / mark_fs control arc resolution here,
+    // even when a global $fn is set for the rest of the mug.
     if (len(_mpoints) > 0) {
-        _dz = _mark_depth / _mark_slices;
-        for (i = [0:_mark_slices - 1]) {
-            _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
-            translate([0, 0, i * _dz])
-                linear_extrude(height = _dz + 0.001, convexity = 4)
-                    offset(r = _r)
-                        polygon(points = _mpoints, paths = mark_paths);
-        }
+        if (mark_draft_angle > 0) {
+            if (mark_inset) {
+                // Debossed: layered linear_extrude + offset.
+                _dz = _mark_depth / _mark_slices;
+                for (i = [0:_mark_slices - 1]) {
+                    _r = -_mark_draft * (i + 0.5) / _mark_slices;
+                    translate([0, 0, i * _dz])
+                        linear_extrude(height = _dz + 0.001, convexity = 4)
+                            offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
+                                polygon(points = _mpoints, paths = mark_paths);
+                }
+            } else
+                // Embossed: expands at z=0 (visible tip after mirror),
+                // original at z=mark_depth (base after mirror).
+                offset_sweep(_mark_region_mould, height = _mark_depth,
+                    bottom = os_chamfer(width = -_mark_draft,
+                                        height = _mark_depth - 0.01,
+                                        extra = 0.01),
+                    steps = 1, check_valid = false, convexity = 4,
+                    $fn = 0, $fa = mark_fa, $fs = mark_fs);
+        } else
+            linear_extrude(height = _mark_depth, convexity = 4)
+                polygon(points = _mpoints, paths = mark_paths);
     }
 }
 
@@ -775,28 +798,30 @@ _v_mug_outer = abs(vnf_volume(_vnf_outer_full));
 _v_slip_retained = _v_mug_outer - _v_mug_capacity;
 
 // --- Echo volume estimates ---
-echo(str(""));
-echo(str("=== SLIP VOLUME (greenware) ==="));
-echo(str("  Slip fill:      ", round(_v_slip_fill / 1000), " mL"));
-echo(str("  Slip retained:  ", round(_v_slip_retained / 1000), " mL"));
-echo(str("================================"));
+if (_profile_module == "") {
+    echo(str(""));
+    echo(str("=== SLIP VOLUME (greenware) ==="));
+    echo(str("  Slip fill:      ", round(_v_slip_fill / 1000), " mL"));
+    echo(str("  Slip retained:  ", round(_v_slip_retained / 1000), " mL"));
+    echo(str("================================"));
 
-if (mould_type == 2) {
-    echo(str(""));
-    echo(str("=== PLASTER VOLUME ESTIMATES (2-part mould) ==="));
-    echo(str("  Half A:  ", round(_v_2part_half / 1000), " mL"));
-    echo(str("  Half B:  ", round(_v_2part_half / 1000), " mL"));
-    echo(str("  Total:   ", round(2 * _v_2part_half / 1000), " mL"));
-    echo(str("================================================"));
-} else if (mould_type == 3) {
-    _v_3part_total = 2 * _v_3part_upper_half + _v_3part_base;
-    echo(str(""));
-    echo(str("=== PLASTER VOLUME ESTIMATES (3-part mould) ==="));
-    echo(str("  Half A:  ", round(_v_3part_upper_half / 1000), " mL"));
-    echo(str("  Half B:  ", round(_v_3part_upper_half / 1000), " mL"));
-    echo(str("  Base:    ", round(_v_3part_base / 1000), " mL"));
-    echo(str("  Total:   ", round(_v_3part_total / 1000), " mL"));
-    echo(str("================================================"));
+    if (mould_type == 2) {
+        echo(str(""));
+        echo(str("=== PLASTER VOLUME ESTIMATES (2-part mould) ==="));
+        echo(str("  Half A:  ", round(_v_2part_half / 1000), " mL"));
+        echo(str("  Half B:  ", round(_v_2part_half / 1000), " mL"));
+        echo(str("  Total:   ", round(2 * _v_2part_half / 1000), " mL"));
+        echo(str("================================================"));
+    } else if (mould_type == 3) {
+        _v_3part_total = 2 * _v_3part_upper_half + _v_3part_base;
+        echo(str(""));
+        echo(str("=== PLASTER VOLUME ESTIMATES (3-part mould) ==="));
+        echo(str("  Half A:  ", round(_v_3part_upper_half / 1000), " mL"));
+        echo(str("  Half B:  ", round(_v_3part_upper_half / 1000), " mL"));
+        echo(str("  Base:    ", round(_v_3part_base / 1000), " mL"));
+        echo(str("  Total:   ", round(_v_3part_total / 1000), " mL"));
+        echo(str("================================================"));
+    }
 }
 
 // =====================================================================
@@ -844,8 +869,37 @@ module render_3part() {
     }
 }
 
-if (mould_type == 2) {
+// --- Profiling dispatch ---
+if (_profile_module == "") {
+    if (mould_type == 2) render_2part();
+    else if (mould_type == 3) render_3part();
+} else if (_profile_module == "noop") {
+    // Render nothing — measures startup cost (includes BOSL2 loading
+    // and top-level volume estimation that cannot be conditionally skipped).
+} else if (_profile_module == "mug_body") {
+    mug_body();
+} else if (_profile_module == "mug_solid") {
+    mug_solid();
+} else if (_profile_module == "handle") {
+    handle();
+} else if (_profile_module == "mug_positive") {
+    mug_positive();
+} else if (_profile_module == "mould_hull_2d") {
+    linear_extrude(1) mould_hull_2d();
+} else if (_profile_module == "mould_outer_hull_2d") {
+    linear_extrude(1) mould_outer_hull_2d();
+} else if (_profile_module == "full_walls") {
+    full_walls();
+} else if (_profile_module == "full_outer_hull") {
+    full_outer_hull();
+} else if (_profile_module == "case_half_a") {
+    case_half_a();
+} else if (_profile_module == "case_half_b") {
+    case_half_b();
+} else if (_profile_module == "case_base") {
+    case_base();
+} else if (_profile_module == "render_2part") {
     render_2part();
-} else if (mould_type == 3) {
+} else if (_profile_module == "render_3part") {
     render_3part();
 }

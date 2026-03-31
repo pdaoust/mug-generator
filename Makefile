@@ -14,7 +14,7 @@ SCAD := $(wildcard $(SRC_DIR)/scad/*.scad)
 
 SOURCES := $(INX) $(PY_MAIN) $(LIB_PY) $(SCAD)
 
-.PHONY: all sign clean test
+.PHONY: all sign clean test profile
 
 all: $(BUNDLE)
 
@@ -35,6 +35,9 @@ sign: $(BUNDLE)
 
 test:
 	.venv/bin/pytest tests/ -q
+
+profile:
+	python tools/profile_scad.py $(SCAD_OUTPUT_DIR)
 
 clean:
 	rm -rf $(DIST_DIR)

@@ -162,6 +162,8 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     lines.append(f"mark_inset = {'true' if params.get('mark_inset', True) else 'false'};\n")
     lines.append(f"mark_draft_angle = {params.get('mark_draft_angle', 45.0):.6f};\n")
     lines.append(f"mark_layer_height = {params.get('mark_layer_height', 0.2):.6f};\n")
+    lines.append(f"mark_fa = {params.get('mark_fa', 12):.6f};\n")
+    lines.append(f"mark_fs = {params.get('mark_fs', 0.25):.6f};\n")
 
     (output_dir / "mug_params.scad").write_text("".join(lines))
 

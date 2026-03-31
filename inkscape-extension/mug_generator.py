@@ -61,6 +61,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--mark_inset", type=inkex.Boolean, default=True)
         pars.add_argument("--mark_draft_angle", type=float, default=45.0)
         pars.add_argument("--mark_layer_height", type=float, default=0.20)
+        pars.add_argument("--mark_fa", type=float, default=12.0)
+        pars.add_argument("--mark_fs", type=float, default=0.25)
 
     def effect(self):
         svg = self.svg
@@ -309,7 +311,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
             handle_path_out = []
 
         # Extract maker's mark (optional layer)
-        mark_raw = get_layer_mark_polygons(svg, "mark")
+        mm_per_svg = to_mm(scale, doc_units)
+        mark_seg_len = self.options.mark_fs / mm_per_svg if mm_per_svg > 0 else None
+        mark_raw = get_layer_mark_polygons(svg, "mark",
+                                           max_seg_len=mark_seg_len)
         mark_enabled = len(mark_raw) > 0
         mark_polygons = []
         if mark_enabled:
@@ -378,6 +383,8 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "mark_inset": self.options.mark_inset,
                 "mark_draft_angle": self.options.mark_draft_angle,
                 "mark_layer_height": self.options.mark_layer_height,
+                "mark_fa": self.options.mark_fa,
+                "mark_fs": self.options.mark_fs,
                 **mould_params,
             },
         }

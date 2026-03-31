@@ -6,11 +6,15 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
+include <BOSL2/rounding.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
 include <handle_stations.scad>
 include <mark_polygon.scad>
+
+// Profiling gate — override with -D '_profile_module="name"' on the CLI.
+_profile_module = is_undef(_profile_module) ? "" : _profile_module;
 
 // --- Mug body (single closed cross-section, revolved) ---
 //
@@ -92,12 +96,12 @@ mug_min_z = min([for (p = _outer) p[1]]);
 // Z of the mug base centre (foot center on the axis).
 _foot_center_z = mug_body_profile[body_foot_idx][1];
 
-// Foot-roof points within 0.25 * mark_depth of the foot center Z.
-// Bezier interpolation can round the foot-ring corner, making the
+// Foot-roof points within 0.1mm of the foot roof.
+// Bezier interpolation can round the inner foot-ring corner, making the
 // roof slightly non-flat.  For debossed marks we use the lowest
 // point so the stamp reaches the full surface; for embossed marks
 // we use the highest so the stamp sits above the full surface.
-_mark_tol = 0.25 * mark_depth;
+_mark_tol = 0.1;
 _foot_roof_z = [for (i = [0:body_foot_idx])
     let(z = mug_body_profile[i][1])
     if (abs(z - _foot_center_z) <= _mark_tol) z];
@@ -106,21 +110,42 @@ _mark_z = mark_inset
     : max(_foot_roof_z);
 
 _mark_draft = mark_depth * tan(mark_draft_angle);
-_mark_half_draft = _mark_draft / 2;
 _mark_slices = mark_draft_angle > 0
     ? max(2, round(mark_depth / mark_layer_height))
     : 1;
 
+// Convert flat mark_points/mark_paths into a BOSL2 region (list of paths).
+_mark_region = [for (p = mark_paths) [for (i = p) mark_points[i]]];
+
 module mark_stamp() {
+    // $fn = 0 so mark_fa / mark_fs control arc resolution here,
+    // even when a global $fn is set for the rest of the mug.
     if (len(mark_points) > 0) {
-        _dz = mark_depth / _mark_slices;
-        for (i = [0:_mark_slices - 1]) {
-            _r = _mark_half_draft * (1 - 2 * (i + 0.5) / _mark_slices);
-            translate([0, 0, i * _dz])
-                linear_extrude(height = _dz + 0.001)
-                    offset(r = _r)
-                        polygon(points = mark_points, paths = mark_paths);
-        }
+        if (mark_draft_angle > 0) {
+            if (mark_inset) {
+                // Debossed: layered linear_extrude + offset.
+                // offset_sweep can't handle inward offset on complex
+                // multipath regions (CGAL errors on hole subtraction).
+                _dz = mark_depth / _mark_slices;
+                for (i = [0:_mark_slices - 1]) {
+                    _r = -_mark_draft * (i + 0.5) / _mark_slices;
+                    translate([0, 0, i * _dz])
+                        linear_extrude(height = _dz + 0.001)
+                            offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
+                                polygon(points = mark_points, paths = mark_paths);
+                }
+            } else
+                // Embossed: expands at z=0 (visible tip after mirror),
+                // original at z=mark_depth (base after mirror).
+                offset_sweep(_mark_region, height = mark_depth,
+                    bottom = os_chamfer(width = -_mark_draft,
+                                        height = mark_depth - 0.01,
+                                        extra = 0.01),
+                    steps = 1, check_valid = false,
+                    $fn = 0, $fa = mark_fa, $fs = mark_fs);
+        } else
+            linear_extrude(height = mark_depth)
+                polygon(points = mark_points, paths = mark_paths);
     }
 }
 
@@ -149,18 +174,33 @@ module mug_assembly() {
     }
 }
 
-mug_assembly();
+// --- Profiling dispatch ---
+if (_profile_module == "") {
+    mug_assembly();
+} else if (_profile_module == "noop") {
+    // Render nothing — measures pure startup cost.
+} else if (_profile_module == "mug_body") {
+    mug_body();
+} else if (_profile_module == "handle") {
+    handle();
+} else if (_profile_module == "mark_stamp") {
+    mark_stamp();
+} else if (_profile_module == "mug_assembly") {
+    mug_assembly();
+}
 
 // =====================================================================
 // MUG VOLUME ESTIMATION
 // =====================================================================
 
-_inner = [for (i = [body_foot_idx:len(mug_body_profile)-1])
-    mug_body_profile[i]];
-_vnf_inner = rotate_sweep(_inner, caps=true, $fn=36);
-_v_mug_ml = round(abs(vnf_volume(_vnf_inner)) / 1000);
+if (_profile_module == "") {
+    _inner = [for (i = [body_foot_idx:len(mug_body_profile)-1])
+        mug_body_profile[i]];
+    _vnf_inner = rotate_sweep(_inner, caps=true, $fn=36);
+    _v_mug_ml = round(abs(vnf_volume(_vnf_inner)) / 1000);
 
-echo(str(""));
-echo(str("=== MUG VOLUME ==="));
-echo(str("  Capacity:  ", _v_mug_ml, " mL"));
-echo(str("=================="));
+    echo(str(""));
+    echo(str("=== MUG VOLUME ==="));
+    echo(str("  Capacity:  ", _v_mug_ml, " mL"));
+    echo(str("=================="));
+}

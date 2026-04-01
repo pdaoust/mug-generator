@@ -149,12 +149,13 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     if "breather_hole_count" in params:
         lines.append(f"breather_hole_count = {params['breather_hole_count']};\n")
 
-    if "mould_type" in params:
-        lines.append(f"mould_type = {params['mould_type']};\n")
-
     for key in ("foot_concavity_z", "foot_concavity_radius"):
         if key in params:
             lines.append(f"{key} = {params[key]:.6f};\n")
+
+    if "mould_type" in params:
+        lines.append(f"mould_type = {params['mould_type']};\n")
+
 
     # Maker's mark parameters
     lines.append(f"mark_enabled = {'true' if params.get('mark_enabled') else 'false'};\n")

@@ -10,7 +10,6 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
-include <BOSL2/rounding.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -94,7 +93,7 @@ module mug_body() {
 
 // --- Maker's mark stamp ---
 _foot_center_z = _body[body_foot_idx][1];
-_mark_tol = 0.25 * _mark_depth;
+_mark_tol = 0.1;
 _foot_roof_z_mould = [for (i = [0:body_foot_idx])
     let(z = _body[i][1])
     if (abs(z - _foot_center_z) <= _mark_tol) z];
@@ -107,33 +106,22 @@ _mark_slices = mark_draft_angle > 0
     ? max(2, round(_mark_depth / mark_layer_height))
     : 1;
 
-// Convert flat points/paths into a BOSL2 region (list of paths).
-_mark_region_mould = [for (p = mark_paths) [for (i = p) _mpoints[i]]];
-
 module mark_stamp() {
     // $fn = 0 so mark_fa / mark_fs control arc resolution here,
     // even when a global $fn is set for the rest of the mug.
     if (len(_mpoints) > 0) {
         if (mark_draft_angle > 0) {
-            if (mark_inset) {
-                // Debossed: layered linear_extrude + offset.
-                _dz = _mark_depth / _mark_slices;
-                for (i = [0:_mark_slices - 1]) {
-                    _r = -_mark_draft * (i + 0.5) / _mark_slices;
-                    translate([0, 0, i * _dz])
-                        linear_extrude(height = _dz + 0.001, convexity = 4)
-                            offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
-                                polygon(points = _mpoints, paths = mark_paths);
-                }
-            } else
-                // Embossed: expands at z=0 (visible tip after mirror),
-                // original at z=mark_depth (base after mirror).
-                offset_sweep(_mark_region_mould, height = _mark_depth,
-                    bottom = os_chamfer(width = -_mark_draft,
-                                        height = _mark_depth - 0.01,
-                                        extra = 0.01),
-                    steps = 1, check_valid = false, convexity = 4,
-                    $fn = 0, $fa = mark_fa, $fs = mark_fs);
+            _dz = _mark_depth / _mark_slices;
+            for (i = [0:_mark_slices - 1]) {
+                _t = i / (_mark_slices - 1);
+                _r = mark_inset
+                    ? -_mark_draft * _t
+                    :  _mark_draft * (1 - _t);
+                translate([0, 0, i * _dz])
+                    linear_extrude(height = _dz + 0.001, convexity = 4)
+                        offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
+                            polygon(points = _mpoints, paths = mark_paths);
+            }
         } else
             linear_extrude(height = _mark_depth, convexity = 4)
                 polygon(points = _mpoints, paths = mark_paths);
@@ -234,10 +222,12 @@ function mug_r_at_z(z) =
     ) len(results) > 0 ? max(results) : prof[0][0];
 
 // Split Z for the 3-part mould.
-_foot_z = (is_undef(foot_concavity_z)
-        ? (mark_enabled ? _mark_z : 0)
-        : foot_concavity_z * _cs)
+// Z-seam split: must clear the foot roof (highest point in the
+// concavity) plus the debossed stamp cavity (if applicable).
+_foot_z = _foot_center_z
     + (mark_enabled && mark_inset ? _mark_depth : 0);
+echo("FOOT Z");
+echo(_foot_z);
 
 
 // Handle rail projections onto the XZ plane (2D mould coordinates:
@@ -548,7 +538,7 @@ module case_base_part() {
     union() {
         case_base_box();
 
-        intersection() {
+        translate([0, 0, -wall_thickness - 0.01]) intersection() {
             mug_solid();
             clip_z_below(_foot_z);
         }
@@ -576,11 +566,11 @@ module base_natches() {
 // Sockets: unioned onto base case → negative in plaster.
 // Hemisphere dome -Z; teardrop cone toward Y=0 (inward on base, down on A/B).
 module base_keys_sockets() {
-    translate([0, base_natch_y, _foot_z]) {
+    translate([0, base_natch_y, _foot_z - wall_thickness]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_socket);
         _teardrop_cone(_key_r_socket, [90, 0, 0]);
     }
-    translate([0, -base_natch_y, _foot_z]) {
+    translate([0, -base_natch_y, _foot_z - wall_thickness]) {
         rotate([180, 0, 0]) _hemisphere(_key_r_socket);
         _teardrop_cone(_key_r_socket, [-90, 0, 0]);
     }

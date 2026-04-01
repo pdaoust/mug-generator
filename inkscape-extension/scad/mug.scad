@@ -6,7 +6,6 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
-include <BOSL2/rounding.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -114,35 +113,26 @@ _mark_slices = mark_draft_angle > 0
     ? max(2, round(mark_depth / mark_layer_height))
     : 1;
 
-// Convert flat mark_points/mark_paths into a BOSL2 region (list of paths).
-_mark_region = [for (p = mark_paths) [for (i = p) mark_points[i]]];
-
 module mark_stamp() {
     // $fn = 0 so mark_fa / mark_fs control arc resolution here,
     // even when a global $fn is set for the rest of the mug.
     if (len(mark_points) > 0) {
         if (mark_draft_angle > 0) {
-            if (mark_inset) {
-                // Debossed: layered linear_extrude + offset.
-                // offset_sweep can't handle inward offset on complex
-                // multipath regions (CGAL errors on hole subtraction).
-                _dz = mark_depth / _mark_slices;
-                for (i = [0:_mark_slices - 1]) {
-                    _r = -_mark_draft * (i + 0.5) / _mark_slices;
-                    translate([0, 0, i * _dz])
-                        linear_extrude(height = _dz + 0.001)
-                            offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
-                                polygon(points = mark_points, paths = mark_paths);
-                }
-            } else
-                // Embossed: expands at z=0 (visible tip after mirror),
-                // original at z=mark_depth (base after mirror).
-                offset_sweep(_mark_region, height = mark_depth,
-                    bottom = os_chamfer(width = -_mark_draft,
-                                        height = mark_depth - 0.01,
-                                        extra = 0.01),
-                    steps = 1, check_valid = false,
-                    $fn = 0, $fa = mark_fa, $fs = mark_fs);
+            _dz = mark_depth / _mark_slices;
+            for (i = [0:_mark_slices - 1]) {
+                // Debossed: 0 → -draft (inset deepens with z).
+                // Embossed: +draft → 0 (outset at z=0, original at
+                // z=mark_depth; mirror in assembly flips so the
+                // widest end becomes the visible tip).
+                _t = i / (_mark_slices - 1);
+                _r = mark_inset
+                    ? -_mark_draft * _t
+                    :  _mark_draft * (1 - _t);
+                translate([0, 0, i * _dz])
+                    linear_extrude(height = _dz + 0.001)
+                        offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
+                            polygon(points = mark_points, paths = mark_paths);
+            }
         } else
             linear_extrude(height = mark_depth)
                 polygon(points = mark_points, paths = mark_paths);

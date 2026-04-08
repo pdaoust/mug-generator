@@ -84,24 +84,20 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         n_stations = compute_n(fn, fa, fs, mid_total)
         n_stations = max(n_stations, 5)
 
-        import math
         from lib.units import to_mm as _to_mm
 
-        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                      - mug_surface.axis_x)
-        circumference = 2.0 * math.pi * avg_radius
-        n_rev = compute_n(fn, fa, fs, circumference)
-        body_seg_len = circumference / n_rev
-        handle_seg_len = mid_total / n_stations
-
         mm_per_svg = _to_mm(scale, doc_units)
-        svg_body_seg = body_seg_len / mm_per_svg
-        svg_handle_seg = handle_seg_len / mm_per_svg
+        if fn > 0:
+            svg_fa = 360.0 / fn
+            svg_fs = None
+        else:
+            svg_fa = fa
+            svg_fs = fs / mm_per_svg if mm_per_svg > 0 else None
 
         mug_body_paths = get_layer_paths(svg_root, "mug body",
-                                         max_seg_len=svg_body_seg)
+                                         fa_deg=svg_fa, fs=svg_fs)
         profile_paths = get_layer_paths(svg_root, "handle profile",
-                                        max_seg_len=svg_handle_seg)
+                                        fa_deg=svg_fa, fs=svg_fs)
         body_mm = svg_to_mm(mug_body_paths[0])
         body_profile, foot_idx = split_body_profile(body_mm)
         mug_outer_mm = body_profile[:foot_idx + 1]
@@ -117,20 +113,18 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         )
 
     else:
-        import math
         from lib.units import to_mm as _to_mm
 
-        avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                      - mug_surface.axis_x)
-        circumference = 2.0 * math.pi * avg_radius
-        n_rev = compute_n(fn, fa, fs, circumference)
-        body_seg_len = circumference / n_rev
-
         mm_per_svg = _to_mm(scale, doc_units)
-        svg_body_seg = body_seg_len / mm_per_svg
+        if fn > 0:
+            svg_fa = 360.0 / fn
+            svg_fs = None
+        else:
+            svg_fa = fa
+            svg_fs = fs / mm_per_svg if mm_per_svg > 0 else None
 
         mug_body_paths = get_layer_paths(svg_root, "mug body",
-                                         max_seg_len=svg_body_seg)
+                                         fa_deg=svg_fa, fs=svg_fs)
         body_mm = svg_to_mm(mug_body_paths[0])
         body_profile, foot_idx = split_body_profile(body_mm)
         mug_outer_mm = body_profile[:foot_idx + 1]

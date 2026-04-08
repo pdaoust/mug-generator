@@ -227,26 +227,21 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 self.options.fn, self.options.fa, self.options.fs, mid_total
             )
 
-            # Re-parse with bezier subdivision matching loft resolution
-            import math
+            # Re-parse with bezier subdivision matching OpenSCAD resolution
             from lib.units import to_mm as _to_mm
 
-            avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                          - mug_surface.axis_x)
-            circumference = 2.0 * math.pi * avg_radius
-            n_rev = compute_n(self.options.fn, self.options.fa,
-                              self.options.fs, circumference)
-            body_seg_len = circumference / n_rev
-            handle_seg_len = mid_total / n_stations
-
             mm_per_svg = _to_mm(scale, doc_units)
-            svg_body_seg = body_seg_len / mm_per_svg
-            svg_handle_seg = handle_seg_len / mm_per_svg
+            if self.options.fn > 0:
+                svg_fa = 360.0 / self.options.fn
+                svg_fs = None
+            else:
+                svg_fa = self.options.fa
+                svg_fs = self.options.fs / mm_per_svg if mm_per_svg > 0 else None
 
             mug_body_paths = get_layer_paths(svg, "mug body",
-                                             max_seg_len=svg_body_seg)
+                                             fa_deg=svg_fa, fs=svg_fs)
             profile_paths = get_layer_paths(svg, "handle profile",
-                                            max_seg_len=svg_handle_seg)
+                                            fa_deg=svg_fa, fs=svg_fs)
             body_mm = svg_to_mm(mug_body_paths[0])
             body_profile, foot_idx = split_body_profile(body_mm)
             mug_outer_mm = body_profile[:foot_idx + 1]
@@ -263,21 +258,18 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         else:
             # Re-parse mug body with bezier subdivision even without handle
-            import math
             from lib.units import to_mm as _to_mm
 
-            avg_radius = (sum(p[0] for p in mug_outer_mm) / len(mug_outer_mm)
-                          - mug_surface.axis_x)
-            circumference = 2.0 * math.pi * avg_radius
-            n_rev = compute_n(self.options.fn, self.options.fa,
-                              self.options.fs, circumference)
-            body_seg_len = circumference / n_rev
-
             mm_per_svg = _to_mm(scale, doc_units)
-            svg_body_seg = body_seg_len / mm_per_svg
+            if self.options.fn > 0:
+                svg_fa = 360.0 / self.options.fn
+                svg_fs = None
+            else:
+                svg_fa = self.options.fa
+                svg_fs = self.options.fs / mm_per_svg if mm_per_svg > 0 else None
 
             mug_body_paths = get_layer_paths(svg, "mug body",
-                                             max_seg_len=svg_body_seg)
+                                             fa_deg=svg_fa, fs=svg_fs)
             body_mm = svg_to_mm(mug_body_paths[0])
             body_profile, foot_idx = split_body_profile(body_mm)
             mug_outer_mm = body_profile[:foot_idx + 1]
@@ -312,9 +304,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
 
         # Extract maker's mark (optional layer)
         mm_per_svg = to_mm(scale, doc_units)
-        mark_seg_len = self.options.mark_fs / mm_per_svg if mm_per_svg > 0 else None
+        mark_svg_fs = self.options.mark_fs / mm_per_svg if mm_per_svg > 0 else None
         mark_raw = get_layer_mark_polygons(svg, "mark",
-                                           max_seg_len=mark_seg_len)
+                                           fa_deg=self.options.mark_fa,
+                                           fs=mark_svg_fs)
         mark_enabled = len(mark_raw) > 0
         mark_polygons = []
         if mark_enabled:

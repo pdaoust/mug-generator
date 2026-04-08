@@ -58,36 +58,89 @@ def find_layer(svg_root, label: str):
     return None
 
 
-def _de_casteljau(p0, p1, p2, p3, n_segments=16, max_seg_len=None):
-    """Subdivide a cubic Bezier curve into line segments.
+def _subdivide_adaptive(p0, p1, p2, p3, fa_rad, fs, depth, max_depth=12):
+    """Recursively subdivide a cubic Bezier until each segment is flat enough.
 
-    If *max_seg_len* is given, the number of segments is computed from
-    the estimated arc length so that each chord is ≈ max_seg_len.
+    Returns a list of points NOT including *p0* (the caller prepends it).
+
+    Stopping criteria (matching OpenSCAD's resolution model):
+      - *fs* (min segment length): stop if chord_len ≤ fs.
+      - *fa_rad* (min angle, radians): stop if the estimated angular span
+        of the segment ≤ fa_rad (approximated as 8·deviation / chord_len).
+      - If neither is given, an absolute deviation tolerance of 0.1 is used.
     """
-    if max_seg_len is not None and max_seg_len > 0:
-        # Control-polygon length is an upper bound on the arc length
-        poly_len = (math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-                    + math.hypot(p2[0] - p1[0], p2[1] - p1[1])
-                    + math.hypot(p3[0] - p2[0], p3[1] - p2[1]))
-        n_segments = max(1, round(poly_len / max_seg_len))
+    if depth >= max_depth:
+        return [p3]
 
-    points = []
-    for i in range(n_segments + 1):
-        t = i / n_segments
-        s = 1 - t
-        x = s**3 * p0[0] + 3*s**2*t * p1[0] + 3*s*t**2 * p2[0] + t**3 * p3[0]
-        y = s**3 * p0[1] + 3*s**2*t * p1[1] + 3*s*t**2 * p2[1] + t**3 * p3[1]
-        points.append((x, y))
-    return points
+    dx, dy = p3[0] - p0[0], p3[1] - p0[1]
+    chord_len = math.hypot(dx, dy)
+
+    # fs criterion: segment is already short enough
+    if fs is not None and chord_len <= fs:
+        return [p3]
+
+    if chord_len < 1e-10:
+        # Degenerate chord — measure control-point distance from P0
+        d = max(math.hypot(p1[0] - p0[0], p1[1] - p0[1]),
+                math.hypot(p2[0] - p0[0], p2[1] - p0[1]))
+        if d < 1e-10:
+            return [p3]
+    else:
+        # Perpendicular distance from P1 and P2 to chord P0→P3
+        d1 = abs(dx * (p0[1] - p1[1]) - dy * (p0[0] - p1[0])) / chord_len
+        d2 = abs(dx * (p0[1] - p2[1]) - dy * (p0[0] - p2[0])) / chord_len
+        d = max(d1, d2)
+
+        if fa_rad is not None:
+            # fa criterion: angular span is small enough
+            # θ ≈ 8d/chord_len for a circular arc
+            if d <= chord_len * fa_rad / 8:
+                return [p3]
+        elif fs is None:
+            # Absolute fallback when neither fa nor fs is given
+            if d <= 0.1:
+                return [p3]
+
+    # De Casteljau split at t=0.5
+    m01 = ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+    m12 = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
+    m23 = ((p2[0] + p3[0]) / 2, (p2[1] + p3[1]) / 2)
+    m012 = ((m01[0] + m12[0]) / 2, (m01[1] + m12[1]) / 2)
+    m123 = ((m12[0] + m23[0]) / 2, (m12[1] + m23[1]) / 2)
+    mid = ((m012[0] + m123[0]) / 2, (m012[1] + m123[1]) / 2)
+
+    left = _subdivide_adaptive(p0, m01, m012, mid, fa_rad, fs, depth + 1, max_depth)
+    right = _subdivide_adaptive(mid, m123, m23, p3, fa_rad, fs, depth + 1, max_depth)
+    return left + right
+
+
+def _de_casteljau(p0, p1, p2, p3, fa_deg=None, fs=None):
+    """Subdivide a cubic Bezier curve via adaptive recursive subdivision.
+
+    Uses OpenSCAD-compatible resolution criteria:
+
+      - *fa_deg* (min angle, degrees): controls how flat each segment must
+        be relative to its length.  Derived from ``$fn`` as ``360/$fn``,
+        or passed directly as ``$fa``.
+      - *fs* (min segment length, user units): prevents over-subdivision
+        of short segments.  Passed directly as ``$fs`` (converted to SVG
+        user units by the caller).
+
+    When ``$fn`` is used, only *fa_deg* is set (no *fs* floor).
+    When neither is given, an absolute deviation tolerance of 0.1 is used.
+    """
+    fa_rad = math.radians(fa_deg) if fa_deg is not None else None
+    return [p0] + _subdivide_adaptive(p0, p1, p2, p3, fa_rad, fs, 0)
 
 
 def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, cy_end,
-                    n_segments=16, max_seg_len=None):
+                    n_segments=16, fa_deg=None, fs=None):
     """Convert an SVG arc to line segments.
 
     Uses the endpoint-to-center parameterization conversion.
-    If *max_seg_len* is given, the segment count is derived from the
-    arc length.
+    If *fa_deg* and/or *fs* are given, the segment count is derived
+    from them (matching OpenSCAD's resolution model).  Otherwise
+    falls back to *n_segments* uniform steps.
     """
     if abs(rx) < 1e-12 or abs(ry) < 1e-12:
         return [(cx_end, cy_end)]
@@ -142,9 +195,11 @@ def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, 
     elif not sweep and dtheta > 0:
         dtheta -= 2 * math.pi
 
-    if max_seg_len is not None and max_seg_len > 0:
+    if fa_deg is not None or fs is not None:
+        n_fa = math.ceil(abs(dtheta) / math.radians(fa_deg)) if fa_deg else 1
         arc_len = abs(dtheta) * (rx + ry) / 2
-        n_segments = max(1, round(arc_len / max_seg_len))
+        n_fs = math.ceil(arc_len / fs) if fs else 1
+        n_segments = max(1, n_fa, n_fs)
 
     points = []
     for i in range(1, n_segments + 1):
@@ -159,15 +214,17 @@ def _arc_to_points(cx_start, cy_start, rx, ry, x_rot, large_arc, sweep, cx_end, 
     return points
 
 
-def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float, float]]:
+def _parse_path_d(d: str, fa_deg: float | None = None,
+                   fs: float | None = None) -> list[tuple[float, float]]:
     """Parse an SVG path 'd' attribute into a polyline.
 
     Handles M, L, C, A, Z commands (absolute and relative).
-    Cubic beziers are subdivided via De Casteljau.
+    Cubic beziers are subdivided adaptively based on flatness.
 
-    If *max_seg_len* is given (in SVG user units), bezier and arc
-    subdivision density is computed from the curve length so that
-    each chord is ≈ max_seg_len.  Line segments are unaffected.
+    If *fa_deg* (min angle, degrees) and/or *fs* (min segment length,
+    SVG user units) are given, bezier and arc subdivision density
+    matches OpenSCAD's ``$fa``/``$fs`` resolution model.
+    Line segments are unaffected.
     """
     if not d:
         return []
@@ -240,7 +297,7 @@ def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float,
                     x1 += current[0]; y1 += current[1]
                     x2 += current[0]; y2 += current[1]
                     x += current[0]; y += current[1]
-                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), max_seg_len=max_seg_len)
+                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), fa_deg=fa_deg, fs=fs)
                 points.extend(bez[1:])  # skip first (= current)
                 current = (x, y)
 
@@ -254,7 +311,7 @@ def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float,
                 # Reflect previous control point
                 x1 = 2 * current[0] - x2
                 y1 = 2 * current[1] - y2
-                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), max_seg_len=max_seg_len)
+                bez = _de_casteljau(current, (x1, y1), (x2, y2), (x, y), fa_deg=fa_deg, fs=fs)
                 points.extend(bez[1:])
                 current = (x, y)
 
@@ -268,7 +325,7 @@ def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float,
                 # Convert quadratic to cubic
                 cp1 = (current[0] + 2/3 * (x1 - current[0]), current[1] + 2/3 * (y1 - current[1]))
                 cp2 = (x + 2/3 * (x1 - x), y + 2/3 * (y1 - y))
-                bez = _de_casteljau(current, cp1, cp2, (x, y), max_seg_len=max_seg_len)
+                bez = _de_casteljau(current, cp1, cp2, (x, y), fa_deg=fa_deg, fs=fs)
                 points.extend(bez[1:])
                 current = (x, y)
 
@@ -294,7 +351,7 @@ def _parse_path_d(d: str, max_seg_len: float | None = None) -> list[tuple[float,
                 arc_pts = _arc_to_points(
                     current[0], current[1], rx_val, ry_val,
                     x_rot, large_arc, sweep, x, y,
-                    max_seg_len=max_seg_len,
+                    fa_deg=fa_deg, fs=fs,
                 )
                 points.extend(arc_pts)
                 current = (x, y)
@@ -481,7 +538,8 @@ def _extract_start(chunk_tokens: list[str]) -> tuple[float, float]:
 
 
 def get_layer_mark_polygons(
-    svg_root, label: str, max_seg_len: float | None = None
+    svg_root, label: str, fa_deg: float | None = None,
+    fs: float | None = None,
 ) -> list[list[tuple[float, float]]]:
     """Extract mark polygons from a named layer, splitting compound paths.
 
@@ -491,7 +549,8 @@ def get_layer_mark_polygons(
     Args:
         svg_root: SVG root element.
         label: Layer label to search for.
-        max_seg_len: Bezier/arc subdivision chord length (SVG user units).
+        fa_deg: Min angle per segment (degrees) for curve subdivision.
+        fs: Min segment length (SVG user units) for curve subdivision.
 
     Returns:
         List of polygons (each a list of (x, y) tuples).
@@ -517,7 +576,7 @@ def get_layer_mark_polygons(
         subpaths = _split_subpath_d(d)
 
         for sub_d in subpaths:
-            raw_points = _parse_path_d(sub_d, max_seg_len=max_seg_len)
+            raw_points = _parse_path_d(sub_d, fa_deg=fa_deg, fs=fs)
             if len(raw_points) < 3:
                 continue
             transformed = _apply_transform_2x3(raw_points, transform)
@@ -526,15 +585,15 @@ def get_layer_mark_polygons(
     return polygons
 
 
-def get_layer_paths(svg_root, label: str, max_seg_len: float | None = None) -> list[list[tuple[float, float]]]:
+def get_layer_paths(svg_root, label: str, fa_deg: float | None = None,
+                    fs: float | None = None) -> list[list[tuple[float, float]]]:
     """Extract all paths from a named layer as polylines.
 
     Args:
         svg_root: SVG root element.
         label: Layer label to search for.
-        max_seg_len: If given (in SVG user units), bezier and arc curves
-            are subdivided so each chord ≈ this length.  Line segments
-            are unaffected.  Defaults to 16 fixed segments per curve.
+        fa_deg: Min angle per segment (degrees) for curve subdivision.
+        fs: Min segment length (SVG user units) for curve subdivision.
 
     Returns:
         List of polylines, each a list of (x, y) tuples in document coordinates.
@@ -559,7 +618,7 @@ def get_layer_paths(svg_root, label: str, max_seg_len: float | None = None) -> l
             if not d:
                 continue
 
-            raw_points = _parse_path_d(d, max_seg_len=max_seg_len)
+            raw_points = _parse_path_d(d, fa_deg=fa_deg, fs=fs)
             if not raw_points:
                 continue
 

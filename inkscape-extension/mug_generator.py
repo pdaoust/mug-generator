@@ -63,6 +63,11 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--mark_layer_height", type=float, default=0.20)
         pars.add_argument("--mark_fa", type=float, default=12.0)
         pars.add_argument("--mark_fs", type=float, default=0.25)
+        pars.add_argument("--rib_thickness", type=float, default=2.0)
+        pars.add_argument("--rib_taper", type=float, default=10.0)
+        pars.add_argument("--rib_margin", type=float, default=10.0)
+        pars.add_argument("--wheel_direction", type=str, default="counterclockwise")
+        pars.add_argument("--hump_rib_direction", type=str, default="top")
 
     def effect(self):
         svg = self.svg
@@ -378,6 +383,11 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "mark_layer_height": self.options.mark_layer_height,
                 "mark_fa": self.options.mark_fa,
                 "mark_fs": self.options.mark_fs,
+                "rib_thickness": self.options.rib_thickness,
+                "rib_taper": self.options.rib_taper,
+                "rib_margin": self.options.rib_margin,
+                "wheel_direction": self.options.wheel_direction,
+                "hump_rib_direction": self.options.hump_rib_direction,
                 **mould_params,
             },
         }

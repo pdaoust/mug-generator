@@ -113,6 +113,30 @@ are supported.
              gui-description="Number of breather holes around the lip form">6</param>
     </page>
 
+    <page name="ribs" gui-text="Ribs">
+      <param name="rib_thickness" type="float" min="0.5" max="10.0" precision="1"
+             gui-text="Rib thickness (mm)"
+             gui-description="Thickness of the jiggering rib.">3.0</param>
+      <param name="rib_taper" type="float" min="0" max="20.0" precision="1"
+             gui-text="Rib taper (mm)"
+             gui-description="Inset amount that tapers the cutting edge of the jiggering rib, creating a thinner leading edge for shaping clay.">6.0</param>
+      <param name="rib_margin" type="float" min="2" max="50" precision="1"
+             gui-text="Rib margin (mm)"
+             gui-description="Margin between the outermost ribbing edge and the rectangle boundary.">20.0</param>
+      <param name="wheel_direction" type="optiongroup" appearance="combo"
+             gui-text="Wheel direction"
+             gui-description="Direction your potter's wheel spins. Clockwise mirrors the rib so the cutting edge faces the right way.">
+        <option value="counterclockwise">Counterclockwise</option>
+        <option value="clockwise">Clockwise</option>
+      </param>
+      <param name="hump_rib_direction" type="optiongroup" appearance="combo"
+             gui-text="Hump rib approach direction"
+             gui-description="Direction the jigger arm approaches the hump mould. 'Top' allows a concave foot but cuts off inward lip hooks. 'Side' allows a profiled lip but cuts off a concave foot.">
+        <option value="top">From top</option>
+        <option value="side">From side</option>
+      </param>
+    </page>
+
     <page name="makers-mark" gui-text="Maker's mark">
       <param name="mark_depth" type="float" min="0.1" max="5.0" precision="1"
              gui-text="Mark depth (mm)">1.0</param>

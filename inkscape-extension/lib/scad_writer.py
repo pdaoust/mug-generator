@@ -166,6 +166,15 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     lines.append(f"mark_fa = {params.get('mark_fa', 12):.6f};\n")
     lines.append(f"mark_fs = {params.get('mark_fs', 0.25):.6f};\n")
 
+    # Jiggering rib parameters
+    for key in ("rib_thickness", "rib_taper", "rib_margin"):
+        if key in params:
+            lines.append(f"{key} = {params[key]:.6f};\n")
+    if "wheel_direction" in params:
+        lines.append(f'wheel_direction = "{params["wheel_direction"]}";\n')
+    if "hump_rib_direction" in params:
+        lines.append(f'hump_rib_direction = "{params["hump_rib_direction"]}";\n')
+
     (output_dir / "mug_params.scad").write_text("".join(lines))
 
 

@@ -216,6 +216,11 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             "filler_tube_height": filler_tube_height,
             "clay_shrinkage_pct": clay_shrinkage,
             "handle_enabled": handle_enabled,
+            "rib_thickness": 2.0,
+            "rib_taper": 10.0,
+            "rib_margin": 10.0,
+            "wheel_direction": "counterclockwise",
+            "hump_rib_direction": "top",
             **mould_params,
         },
     }
@@ -292,9 +297,25 @@ class TestIntegration:
             for p1, p2 in zip(s1, s2):
                 assert p1 == pytest.approx(p2, abs=1e-6)
 
-    def test_mould_scad_copied(self, tmp_path):
+    def test_case_mould_scad_copied(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
-        assert (tmp_path / "mould.scad").exists()
+        assert (tmp_path / "case_mould.scad").exists()
+
+    def test_new_scad_files_copied(self, tmp_path):
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        for name in ("hump_mould.scad", "slump_mould.scad",
+                      "hump_mould_jiggering_rib.scad",
+                      "slump_mould_jiggering_rib.scad"):
+            assert (tmp_path / name).exists(), f"{name} not copied"
+
+    def test_jiggering_params_in_mug_params(self, tmp_path):
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        text = (tmp_path / "mug_params.scad").read_text()
+        assert "rib_thickness" in text
+        assert "rib_taper" in text
+        assert "rib_margin" in text
+        assert "wheel_direction" in text
+        assert "hump_rib_direction" in text
 
     def test_auto_resolution(self, tmp_path):
         """Test with auto resolution (fn=0) — should still produce valid output."""
@@ -395,5 +416,5 @@ class TestIntegration:
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         mug_text = (tmp_path / "mug.scad").read_text()
         assert "snap_to_mug" in mug_text
-        mould_text = (tmp_path / "mould.scad").read_text()
+        mould_text = (tmp_path / "case_mould.scad").read_text()
         assert "snap_to_mug" in mould_text

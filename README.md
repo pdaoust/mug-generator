@@ -13,12 +13,15 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 
 1. Install the prerequisites:
     * [Inkscape](https://inkscape.org/) 1.2 or higher
-    * A recent version of [OpenSCAD](https://openscad.org/) with the [BOSL2](https://github.com/BelfrySCAD/BOSL2) library installed in its `lib/` folder (the BOSL2 readme will give you instructions)
+    * A nightly version of [OpenSCAD](https://openscad.org/) with the [BOSL2](https://github.com/BelfrySCAD/BOSL2) library installed in its `lib/` folder (the BOSL2 readme will give you instructions).
 2. Download a release from this repo's [Releases page](https://github.com/pdaoust/mug-generator/releases).
 3. In Inkscape, go to **Extensions** > **Manage Extensions**.
 4. In the dialog that pops up, go to the **Install Packages** tab.
 5. Press the button at the bottom of the dialog with a folder icon on it.
 6. Select the package you downloaded.
+
+> [!INFO]
+> Only the jiggering ribs need OpenSCAD nightly; if you're using them, you'll need to turn on the experimental 'roof' feature. If you're not going to use jiggering ribs, you can use the stable OpenSCAD 2021.01 instead.
 
 ## Designing your mug
 

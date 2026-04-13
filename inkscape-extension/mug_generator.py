@@ -68,6 +68,13 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--rib_margin", type=float, default=10.0)
         pars.add_argument("--wheel_direction", type=str, default="counterclockwise")
         pars.add_argument("--hump_rib_direction", type=str, default="top")
+        pars.add_argument("--export_prototype", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_case_mould", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_funnel", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_slump_mould", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_slump_rib", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_hump_mould", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_hump_rib", type=inkex.Boolean, default=True)
 
     def effect(self):
         svg = self.svg
@@ -361,8 +368,23 @@ class MugGeneratorEffect(inkex.EffectExtension):
         else:
             mould_params["mould_type"] = 2
 
+        # Selective export flags.  Each subsidiary rib is demoted to False
+        # when its parent mould is unchecked, since the rib file includes
+        # parameters that only exist alongside the mould.
+        opt = self.options
+        exports = {
+            "prototype": bool(opt.export_prototype),
+            "case_mould": bool(opt.export_case_mould),
+            "funnel": bool(opt.export_funnel),
+            "slump_mould": bool(opt.export_slump_mould),
+            "slump_rib": bool(opt.export_slump_mould and opt.export_slump_rib),
+            "hump_mould": bool(opt.export_hump_mould),
+            "hump_rib": bool(opt.export_hump_mould and opt.export_hump_rib),
+        }
+
         # Build output data
         data = {
+            "exports": exports,
             "mug_body_profile": scad_body_profile,
             "handle_stations": handle_stations_out,
             "handle_path": handle_path_out,

@@ -153,6 +153,24 @@ are supported.
     </page>
 
     <page name="export" gui-text="Export">
+      <label appearance="header">What to export</label>
+      <param name="export_prototype" type="bool"
+             gui-text="Prototype (mug + handle)">true</param>
+      <param name="export_case_mould" type="bool"
+             gui-text="Case mould">true</param>
+      <param name="export_funnel" type="bool"
+             gui-text="Pouring funnel">true</param>
+      <param name="export_slump_mould" type="bool"
+             gui-text="Slump mould">true</param>
+      <param name="export_slump_rib" type="bool" indent="1"
+             gui-text="Slump mould jiggering rib"
+             gui-description="Only exported if the slump mould is also exported.">true</param>
+      <param name="export_hump_mould" type="bool"
+             gui-text="Hump mould">true</param>
+      <param name="export_hump_rib" type="bool" indent="1"
+             gui-text="Hump mould jiggering rib"
+             gui-description="Only exported if the hump mould is also exported.">true</param>
+      <separator />
       <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"
              gui-text="Clay shrinkage (%)"
              gui-description="Percentage shrinkage during drying and firing. The model is enlarged to compensate so the fired piece matches the drawn size.">10.0</param>

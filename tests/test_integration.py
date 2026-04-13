@@ -28,9 +28,21 @@ def _parse_scad_array(text: str, var_name: str):
     return eval(match.group(1))  # noqa: S307
 
 
+DEFAULT_EXPORTS = {
+    "prototype": True,
+    "case_mould": True,
+    "funnel": True,
+    "slump_mould": True,
+    "slump_rib": True,
+    "hump_mould": True,
+    "hump_rib": True,
+}
+
+
 def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
                    clay_shrinkage=0.0, mark_depth=1.0, mark_inset=True,
-                   mark_draft_angle=45.0, mark_layer_height=0.2):
+                   mark_draft_angle=45.0, mark_layer_height=0.2,
+                   exports=None):
     """Run the full pipeline without inkex (pure stdlib XML parsing)."""
     tree = ET.parse(svg_path)
     svg_root = tree.getroot()
@@ -202,7 +214,17 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         handle_stations_out = []
         handle_path_out = []
 
+    exports_resolved = dict(DEFAULT_EXPORTS)
+    if exports is not None:
+        exports_resolved.update(exports)
+    # Subsidiary rib demotion, mirroring mug_generator.py
+    if not exports_resolved["slump_mould"]:
+        exports_resolved["slump_rib"] = False
+    if not exports_resolved["hump_mould"]:
+        exports_resolved["hump_rib"] = False
+
     data = {
+        "exports": exports_resolved,
         "mug_body_profile": scad_body_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
         "handle_stations": handle_stations_out,
@@ -418,3 +440,72 @@ class TestIntegration:
         assert "snap_to_mug" in mug_text
         mould_text = (tmp_path / "case_mould.scad").read_text()
         assert "snap_to_mug" in mould_text
+
+
+class TestSelectiveExport:
+    def test_only_funnel(self, tmp_path):
+        """Exporting only the funnel skips moulds, ribs, prototype."""
+        ex = {k: False for k in DEFAULT_EXPORTS}
+        ex["funnel"] = True
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
+
+        assert (tmp_path / "funnel.scad").exists()
+        assert (tmp_path / "mug_params.scad").exists()
+        assert (tmp_path / "mug_body_profile.scad").exists()
+
+        for name in ("mug.scad", "case_mould.scad", "slump_mould.scad",
+                     "hump_mould.scad", "slump_mould_jiggering_rib.scad",
+                     "hump_mould_jiggering_rib.scad"):
+            assert not (tmp_path / name).exists(), f"{name} should not be copied"
+
+        # Shared consumers get skipped when no consumer is exported
+        assert not (tmp_path / "handle_stations.scad").exists()
+        assert not (tmp_path / "handle_path.scad").exists()
+        assert not (tmp_path / "mark_polygon.scad").exists()
+
+    def test_rib_demoted_when_mould_unchecked(self, tmp_path):
+        """slump_rib is ignored when slump_mould is unchecked."""
+        ex = {k: False for k in DEFAULT_EXPORTS}
+        ex["slump_rib"] = True  # parent is False → should be demoted
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
+
+        assert not (tmp_path / "slump_mould.scad").exists()
+        assert not (tmp_path / "slump_mould_jiggering_rib.scad").exists()
+
+    def test_ribs_are_independent(self, tmp_path):
+        """Unchecking one rib doesn't affect the other."""
+        ex = dict(DEFAULT_EXPORTS)
+        ex["slump_rib"] = False
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
+
+        assert (tmp_path / "hump_mould_jiggering_rib.scad").exists()
+        assert not (tmp_path / "slump_mould_jiggering_rib.scad").exists()
+
+    def test_mug_params_slimmed(self, tmp_path):
+        """mug_params.scad omits params for unselected exports."""
+        ex = {k: False for k in DEFAULT_EXPORTS}
+        ex["funnel"] = True
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
+
+        text = (tmp_path / "mug_params.scad").read_text()
+        # Funnel keys present
+        assert "funnel_wall_angle" in text
+        # Mould / rib / mark keys absent
+        assert "plaster_thickness" not in text
+        assert "natch_radius" not in text
+        assert "rib_thickness" not in text
+        assert "hump_rib_direction" not in text
+        assert "mark_depth" not in text
+
+    def test_prototype_only_keeps_mark_polygon(self, tmp_path):
+        """Prototype consumes mark_polygon; it must still be emitted."""
+        ex = {k: False for k in DEFAULT_EXPORTS}
+        ex["prototype"] = True
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
+
+        assert (tmp_path / "mug.scad").exists()
+        assert (tmp_path / "handle_stations.scad").exists()
+        assert (tmp_path / "handle_path.scad").exists()
+        assert (tmp_path / "mark_polygon.scad").exists()
+        assert not (tmp_path / "funnel.scad").exists()
+        assert not (tmp_path / "case_mould.scad").exists()

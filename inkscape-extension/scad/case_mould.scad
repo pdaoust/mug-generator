@@ -666,25 +666,6 @@ function _axis_closed(pts) =
     )
     concat(head, asc, tail);
 
-// Outward offset of an ascending-z half-profile.  Offsets each point
-// by +off in r; extends the envelope +off above the highest z (or up
-// to `cap_z` if higher); and optionally extends +off below the lowest
-// z when `extend_below` is true.  Produces an ascending-z, axis-closed
-// polygon.
-function _offset_profile(pts, off, cap_z, extend_below = true) =
-    let(
-        n = len(pts),
-        bot_z = extend_below ? pts[0][1] - off : pts[0][1],
-        top_z_nat = pts[n-1][1] + off,
-        use_top_z = is_undef(cap_z) ? top_z_nat : max(top_z_nat, cap_z),
-        offset_body = [for (p = pts) [p[0] + off, p[1]]]
-    )
-    concat(
-        [[0, bot_z], [offset_body[0][0], bot_z]],
-        offset_body,
-        [[offset_body[n-1][0], use_top_z], [0, use_top_z]]
-    );
-
 // Clip a half-profile to z >= z_cut, interpolating at the boundary.
 function _clip_profile_above(pts, z_cut) =
     let(n = len(pts))
@@ -743,35 +724,62 @@ _vnf_handle = handle_enabled
     ? skin(handle_stations_extended, slices=0, caps=true, method="reindex")
     : EMPTY_VNF;
 
-// Hull: outer offset by plaster_thickness, extended up to inner_top_z.
-// _outer goes rim→foot (descending-z); reverse to ascending for the
-// offset function.
-_outer_asc = [for (i = [len(_outer)-1:-1:0]) _outer[i]];
-_hull_profile = _offset_profile(_outer_asc, plaster_thickness, inner_top_z);
-_vnf_hull = _safe_sweep(_hull_profile, _vol_fn);
+// --- Inner hull (cavity) as a 2D region ---
+// The cavity is a prismatic extrusion along Y of the XZ silhouette that
+// `mould_hull_2d()` builds at render time.  We reconstruct the same region
+// here as a BOSL2 region so its area can be computed directly, giving the
+// correct prism volume when multiplied by the Y extrusion height.
+//
+// Y extrusion heights (centred at Y=0). Per half:
+//   inner cavity:            mug_max_radius + plaster_thickness
+//   outer bucket (no keys):  inner + wall_thickness
+//   outer bucket (+ keys):   inner + _key_r_socket + wall_thickness
+// Only the inner value is used for volume estimation in this file; the
+// outer values are echoed for the regression test so future render
+// consolidation keeps them in sync.
+_inner_y_per_half = mug_max_radius + plaster_thickness;
+_inner_y_total = 2 * _inner_y_per_half;
+_outer_y_per_half_base = _inner_y_per_half + wall_thickness;
+_outer_y_per_half_keys = _inner_y_per_half + _key_r_socket + wall_thickness;
+
+// Full mirrored mug silhouette (both halves of the XZ profile).
+_mould_profile_mirror = [for (i = [len(_mould_profile)-1:-1:0])
+    [-_mould_profile[i][0], _mould_profile[i][1]]];
+_mug_halo_region = offset([_mould_profile, _mould_profile_mirror],
+                           r = plaster_thickness, closed = true);
+
+// Handle halo, with the hole inside the outline filled (matches the
+// `polygon(_handle_outer_2d)` filler at mould_hull_2d line ~279).
+_handle_halo_region = handle_enabled
+    ? offset([_handle_outline_2d], r = plaster_thickness / 2, closed = true)
+    : [];
+
+_inner_hull_region_unclipped = handle_enabled
+    ? union(_mug_halo_region,
+            union([_handle_halo_region, _handle_outer_2d]))
+    : _mug_halo_region;
+
+// Clip above inner_top_z (same clip mould_hull_2d applies at render time).
+_hull_clip_rect = [[-5000, -5000], [5000, -5000],
+                   [5000, inner_top_z], [-5000, inner_top_z]];
+_inner_hull_region_2d = intersection(_inner_hull_region_unclipped,
+                                     [_hull_clip_rect]);
 
 _v_mould = abs(vnf_volume(_vnf_mould));
 _v_handle = handle_enabled ? abs(vnf_volume(_vnf_handle)) : 0;
 _v_positive = _v_mould + _v_handle;
-_v_hull = abs(vnf_volume(_vnf_hull));
+_v_inner_hull = region_area(_inner_hull_region_2d) * _inner_y_total;
 
 // --- 2-part volumes ---
-_v_2part_half = (_v_hull - _v_positive) / 2;
+_v_2part_half = (_v_inner_hull - _v_positive) / 2;
 
 // --- 3-part volumes ---
-// Clip the ascending outer at _foot_z and re-close both halves on axis.
+// Clip the ascending outer at _foot_z for the positive-above computation.
+_outer_asc = [for (i = [len(_outer)-1:-1:0]) _outer[i]];
 _outer_above = _axis_closed(_clip_profile_above(_outer_asc, _foot_z));
 _outer_below = _axis_closed(_clip_profile_below(_outer_asc, _foot_z));
-// Build the upper hull from the already-clipped ascending outer_above
-// (before re-closure), so it's a fresh offset rather than a clip of the
-// full hull that would drop the top axis row.
-_outer_above_raw = _clip_profile_above(_outer_asc, _foot_z);
-_hull_above = _offset_profile(_outer_above_raw, plaster_thickness,
-                               inner_top_z, extend_below = false);
-
 _vnf_outer_above = _safe_sweep(_outer_above, _vol_fn);
 _vnf_outer_below = _safe_sweep(_outer_below, _vol_fn);
-_vnf_hull_above = _safe_sweep(_hull_above, _vol_fn);
 
 // Filler tube contribution above mug_max_z (the part of the filler
 // tube that doesn't already count as mug positive in _outer_above).
@@ -785,8 +793,15 @@ _v_filler = abs(vnf_volume(_vnf_filler));
 _v_positive_above = abs(vnf_volume(_vnf_outer_above))
                   + _v_filler
                   + _v_handle;
-_v_hull_above_vol = abs(vnf_volume(_vnf_hull_above));
-_v_3part_upper_half = (_v_hull_above_vol - _v_positive_above) / 2;
+
+// Inner hull clipped above _foot_z, for the 3-part upper halves.
+_hull_above_clip_rect = [[-5000, _foot_z], [5000, _foot_z],
+                         [5000, inner_top_z], [-5000, inner_top_z]];
+_inner_hull_above_region = intersection(_inner_hull_region_unclipped,
+                                        [_hull_above_clip_rect]);
+_v_inner_above = region_area(_inner_hull_above_region) * _inner_y_total;
+
+_v_3part_upper_half = (_v_inner_above - _v_positive_above) / 2;
 
 // Base: rectangular box interior minus foot positive.
 // The outer box (case_base_box) is 2*(_base_x_half+wall) × 2*(_base_y_half+wall)
@@ -834,6 +849,16 @@ if (_profile_module == "") {
     echo(str("  Slip fill:      ", round(_v_slip_fill / 1000), " mL"));
     echo(str("  Slip retained:  ", round(_v_slip_retained / 1000), " mL"));
     echo(str("================================"));
+
+    // Y extrusion heights — pinned by an integration test so the volume
+    // calc and any future render consolidation stay in sync.
+    echo(str("Y_EXTENT inner_y_total=", _inner_y_total,
+             " outer_y_base=", 2 * _outer_y_per_half_base,
+             " outer_y_keys=", 2 * _outer_y_per_half_keys,
+             " mug_max_radius=", mug_max_radius,
+             " plaster_thickness=", plaster_thickness,
+             " wall_thickness=", wall_thickness,
+             " key_r_socket=", _key_r_socket));
 
     if (mould_type == 2) {
         echo(str(""));

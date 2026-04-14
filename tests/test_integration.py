@@ -532,8 +532,34 @@ class TestSelectiveExport:
         base = _extract("Base")
 
         assert 100 < slip_fill < 1500, f"slip fill implausible: {slip_fill} mL"
-        assert half_a > 0, f"half A is non-positive: {half_a} mL"
-        assert 0 < base < 2000, f"base is implausible: {base} mL"
+        assert 1000 < half_a < 4000, f"half A implausible: {half_a} mL"
+        assert 100 < base < 2000, f"base is implausible: {base} mL"
+
+        # Regression check on the Y extrusion heights. The plaster-volume
+        # bug that motivated these bounds came from treating the inner hull
+        # as a solid of revolution instead of a Y-extruded prism; pin the
+        # three heights so a future refactor can't silently collapse them
+        # back to a single `_full_y`.
+        m = re.search(
+            r"Y_EXTENT inner_y_total=([\d.]+) outer_y_base=([\d.]+) "
+            r"outer_y_keys=([\d.]+) mug_max_radius=([\d.]+) "
+            r"plaster_thickness=([\d.]+) wall_thickness=([\d.]+) "
+            r"key_r_socket=([\d.]+)",
+            stderr,
+        )
+        assert m, f"Y_EXTENT line missing; stderr:\n{stderr}"
+        inner_y, outer_y_base, outer_y_keys, mmr, pt, wt, krs = (
+            float(v) for v in m.groups()
+        )
+        inner_half = mmr + pt
+        assert abs(inner_y - 2 * inner_half) < 1e-2
+        assert abs(outer_y_base - 2 * (inner_half + wt)) < 1e-2
+        assert abs(outer_y_keys - 2 * (inner_half + krs + wt)) < 1e-2
+        # outer must strictly contain inner on each side.
+        assert outer_y_base > inner_y, (
+            f"outer_y_base ({outer_y_base}) must exceed inner_y_total "
+            f"({inner_y})."
+        )
 
     def test_prototype_only_keeps_mark_polygon(self, tmp_path):
         """Prototype consumes mark_polygon; it must still be emitted."""

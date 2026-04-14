@@ -651,19 +651,38 @@ function _safe_sweep(pts, fn) =
         ? rotate_sweep(pts, caps=true, $fn=fn)
         : EMPTY_VNF;
 
-// Approximate outward offset of a half-profile (list of [r, z] points).
-function _offset_profile(pts, off, cap_z) =
+// Normalize an arbitrary [r, z] half-profile into a closed polygon:
+// ascending z, axis-closed at both ends.  Any input orientation
+// (top→bottom or bottom→top) is accepted; axis points are added
+// only when the endpoints aren't already on the axis.
+function _axis_closed(pts) =
     let(
         n = len(pts),
-        top_r = pts[n-1][0] + off,
-        raw_top_z = pts[n-1][1] + off,
-        use_top_z = is_undef(cap_z) ? raw_top_z : max(raw_top_z, cap_z)
+        asc = pts[0][1] <= pts[n-1][1] ? pts
+                                        : [for (i = [n-1:-1:0]) pts[i]],
+        m = len(asc),
+        head = asc[0][0]   > 0.001 ? [[0, asc[0][1]]]   : [],
+        tail = asc[m-1][0] > 0.001 ? [[0, asc[m-1][1]]] : []
+    )
+    concat(head, asc, tail);
+
+// Outward offset of an ascending-z half-profile.  Offsets each point
+// by +off in r; extends the envelope +off above the highest z (or up
+// to `cap_z` if higher); and optionally extends +off below the lowest
+// z when `extend_below` is true.  Produces an ascending-z, axis-closed
+// polygon.
+function _offset_profile(pts, off, cap_z, extend_below = true) =
+    let(
+        n = len(pts),
+        bot_z = extend_below ? pts[0][1] - off : pts[0][1],
+        top_z_nat = pts[n-1][1] + off,
+        use_top_z = is_undef(cap_z) ? top_z_nat : max(top_z_nat, cap_z),
+        offset_body = [for (p = pts) [p[0] + off, p[1]]]
     )
     concat(
-        [[0, pts[0][1] - off]],
-        [for (p = pts) [p[0] + off, p[1]]],
-        use_top_z > pts[n-1][1] ? [[top_r, use_top_z]] : [],
-        [[0, use_top_z]]
+        [[0, bot_z], [offset_body[0][0], bot_z]],
+        offset_body,
+        [[offset_body[n-1][0], use_top_z], [0, use_top_z]]
     );
 
 // Clip a half-profile to z >= z_cut, interpolating at the boundary.
@@ -710,20 +729,25 @@ function _clip_profile_below(pts, z_cut) =
     ];
 
 // --- VNF construction (low-res for speed) ---
+// Every profile fed to _safe_sweep must be axis-closed and ascending
+// in z so the swept VNF has consistent outward-facing normals and
+// vnf_volume() returns a meaningful magnitude.
 
-// Mould profile as a half-profile for volume estimation (outer + tube cap)
-_mould_half = concat(
+// Mould positive: mug outer + filler tube (axis-closed via _axis_closed)
+_mould_half = _axis_closed(concat(
     _outer,
     [[0, _tube_top_z]]
-);
-
+));
 _vnf_mould = _safe_sweep(_mould_half, _vol_fn);
 _vnf_handle = handle_enabled
     ? skin(handle_stations_extended, slices=0, caps=true, method="reindex")
     : EMPTY_VNF;
 
-// Hull: outer profile offset by plaster_thickness, extended to inner_top_z
-_hull_profile = _offset_profile(_outer, plaster_thickness, inner_top_z);
+// Hull: outer offset by plaster_thickness, extended up to inner_top_z.
+// _outer goes rim→foot (descending-z); reverse to ascending for the
+// offset function.
+_outer_asc = [for (i = [len(_outer)-1:-1:0]) _outer[i]];
+_hull_profile = _offset_profile(_outer_asc, plaster_thickness, inner_top_z);
 _vnf_hull = _safe_sweep(_hull_profile, _vol_fn);
 
 _v_mould = abs(vnf_volume(_vnf_mould));
@@ -735,19 +759,26 @@ _v_hull = abs(vnf_volume(_vnf_hull));
 _v_2part_half = (_v_hull - _v_positive) / 2;
 
 // --- 3-part volumes ---
-_outer_above = _clip_profile_above(_outer, _foot_z);
-_outer_below = _clip_profile_below(_outer, _foot_z);
-_hull_above = _clip_profile_above(_hull_profile, _foot_z);
+// Clip the ascending outer at _foot_z and re-close both halves on axis.
+_outer_above = _axis_closed(_clip_profile_above(_outer_asc, _foot_z));
+_outer_below = _axis_closed(_clip_profile_below(_outer_asc, _foot_z));
+// Build the upper hull from the already-clipped ascending outer_above
+// (before re-closure), so it's a fresh offset rather than a clip of the
+// full hull that would drop the top axis row.
+_outer_above_raw = _clip_profile_above(_outer_asc, _foot_z);
+_hull_above = _offset_profile(_outer_above_raw, plaster_thickness,
+                               inner_top_z, extend_below = false);
 
 _vnf_outer_above = _safe_sweep(_outer_above, _vol_fn);
 _vnf_outer_below = _safe_sweep(_outer_below, _vol_fn);
 _vnf_hull_above = _safe_sweep(_hull_above, _vol_fn);
 
-// Filler tube portion above mug_max_z
-_filler_above_rim = _clip_profile_above(
-    [[0, _body[body_foot_idx][1]], [_split_r, _split_z], [_split_r, _tube_top_z], [0, _tube_top_z]],
+// Filler tube contribution above mug_max_z (the part of the filler
+// tube that doesn't already count as mug positive in _outer_above).
+_filler_above_rim = _axis_closed(_clip_profile_above(
+    [[_split_r, _split_z], [_split_r, _tube_top_z]],
     mug_max_z
-);
+));
 _vnf_filler = _safe_sweep(_filler_above_rim, _vol_fn);
 _v_filler = abs(vnf_volume(_vnf_filler));
 
@@ -757,7 +788,11 @@ _v_positive_above = abs(vnf_volume(_vnf_outer_above))
 _v_hull_above_vol = abs(vnf_volume(_vnf_hull_above));
 _v_3part_upper_half = (_v_hull_above_vol - _v_positive_above) / 2;
 
-// Base: rectangular box interior minus foot positive
+// Base: rectangular box interior minus foot positive.
+// The outer box (case_base_box) is 2*(_base_x_half+wall) × 2*(_base_y_half+wall)
+// × (_foot_z - _base_z_bot); the cavity punched out of it is
+// 2*_base_x_half × 2*_base_y_half × (_foot_z - wall_thickness - _base_z_bot).
+// Plaster poured into the base = cavity volume minus foot positive.
 _v_base_box_interior = (2 * _base_x_half) * (2 * _base_y_half)
                      * (_foot_z - wall_thickness - _base_z_bot);
 _v_foot_positive = abs(vnf_volume(_vnf_outer_below));
@@ -765,23 +800,28 @@ _v_3part_base = _v_base_box_interior - _v_foot_positive;
 
 // --- Slip volumes (greenware, clay-scaled) ---
 
-// Inner profile: foot center → inner floor → inner wall → rim
-_inner = [for (i = [body_foot_idx:len(_body)-1]) _body[i]];
+// Mug interior capacity: inner profile foot→rim, axis-closed.
+_inner = _axis_closed([for (i = [body_foot_idx:len(_body)-1]) _body[i]]);
 _vnf_inner = _safe_sweep(_inner, _vol_fn);
 _v_mug_capacity = abs(vnf_volume(_vnf_inner));
 
-// Slip fill: mug interior + filler tube above the rim.
-_slip_tube = [
-    [_inner[len(_inner)-1][0], _split_z],
-    [_split_r, _split_z],
-    [_split_r, _tube_top_z],
-    [0, _tube_top_z],
-];
+// Slip in the filler tube: the volume strictly above the rim opening.
+// Bottom face sits at the highest point of the mug opening (max of
+// inner rim z and outer rim z), so this slab cannot overlap the mug
+// cavity regardless of rim roll-over shape.
+_rim_top_z = max(_split_z, _body[len(_body)-1][1]);
+_slip_tube = _rim_top_z < _tube_top_z ? [
+    [0,         _rim_top_z],
+    [_split_r,  _rim_top_z],
+    [_split_r,  _tube_top_z],
+    [0,         _tube_top_z],
+] : [];
 _vnf_slip_tube = _safe_sweep(_slip_tube, _vol_fn);
 _v_slip_fill = _v_mug_capacity + abs(vnf_volume(_vnf_slip_tube));
 
-// Outer profile revolve = total volume enclosed by outer surface
-_vnf_outer_full = _safe_sweep(_outer, _vol_fn);
+// Mug solid outer (total volume enclosed by the outer surface).
+_outer_full = _axis_closed(_outer_asc);
+_vnf_outer_full = _safe_sweep(_outer_full, _vol_fn);
 _v_mug_outer = abs(vnf_volume(_vnf_outer_full));
 
 // Slip retained = solid clay walls = outer minus cavity

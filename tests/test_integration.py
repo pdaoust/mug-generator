@@ -1,6 +1,9 @@
 """Integration test: full pipeline from SVG to .scad output."""
 
+import os
 import re
+import shutil
+import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -496,6 +499,41 @@ class TestSelectiveExport:
         assert "rib_thickness" not in text
         assert "hump_rib_direction" not in text
         assert "mark_depth" not in text
+
+    def test_case_mould_volumes_are_sane(self, tmp_path):
+        """Render case_mould.scad with openscad-nightly and check that the
+        echoed volumes fall in plausible ranges for the fixture mug."""
+        openscad = shutil.which("openscad-nightly") or shutil.which("openscad")
+        if not openscad:
+            pytest.skip("openscad not installed")
+
+        # OpenSCAD snaps are confined to $HOME, so stage files there.
+        home_tmp = Path.home() / "tmp" / f"pytest_case_mould_{os.getpid()}"
+        home_tmp.mkdir(parents=True, exist_ok=True)
+        try:
+            _run_pipeline(FIXTURE_SVG, home_tmp, fn=36, clay_shrinkage=10.0)
+            result = subprocess.run(
+                [openscad, "-o", str(home_tmp / "out.stl"),
+                 "--export-format", "binstl",
+                 str(home_tmp / "case_mould.scad")],
+                capture_output=True, text=True, timeout=120,
+            )
+        finally:
+            shutil.rmtree(home_tmp, ignore_errors=True)
+
+        stderr = result.stderr
+        def _extract(label):
+            m = re.search(rf'{label}:\s*(-?\d+)\s*mL', stderr)
+            assert m, f"'{label}' not echoed; stderr:\n{stderr}"
+            return int(m.group(1))
+
+        slip_fill = _extract("Slip fill")
+        half_a = _extract("Half A")
+        base = _extract("Base")
+
+        assert 100 < slip_fill < 1500, f"slip fill implausible: {slip_fill} mL"
+        assert half_a > 0, f"half A is non-positive: {half_a} mL"
+        assert 0 < base < 2000, f"base is implausible: {base} mL"
 
     def test_prototype_only_keeps_mark_polygon(self, tmp_path):
         """Prototype consumes mark_polygon; it must still be emitted."""

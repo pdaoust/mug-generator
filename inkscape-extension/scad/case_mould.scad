@@ -302,7 +302,11 @@ module mould_wall_ring_2d() {
 // 3D EXTRUSIONS (centered on Y=0, spanning full mould width)
 // =====================================================================
 
-_full_y = 2 * (mould_y_half + wall_thickness);
+// Y extent of the bucket. Inner cavity and outer shell share this Y
+// range (linear_extrude of `outer − inner` gives both the same Y).
+// No wall_thickness padding: the +Y face is an open top (user pours
+// there); the −Y face is clipped away and replaced by y_seam_floor.
+_full_y = 2 * mould_y_half;
 
 module full_walls() {
     rotate([90, 0, 0])

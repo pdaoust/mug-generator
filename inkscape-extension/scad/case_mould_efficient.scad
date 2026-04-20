@@ -179,7 +179,7 @@ module ab_raw() {
                 mug_inner_wall_solid();
             }
             half_space_y_pos(-wall_thickness);
-            if (needs_base) half_space_z_pos(z_min_scaled - wall_thickness);
+            if (needs_base) half_space_z_pos(z_min_scaled);
         }
         // inner_half: plaster cavity, flush at seam / z_min
         intersection() {
@@ -392,12 +392,114 @@ module b_part() {
 }
 
 // =====================================================================
-// TOP-LEVEL — Phase 6 verification render
+// BASE PART (rendered only when needs_base)
+// =====================================================================
+// A/B clips at z = z_min_scaled when needs_base, leaving A/B open at
+// the bottom.  The base is a closed cylindrical cap occupying z <
+// z_min_scaled: outer cylinder of radius base_outer_r, plaster cavity
+// carved inside, a flat top lid (wall_thickness thick) that forms the
+// mug's foot surface.  When the mug has a real foot concavity, a
+// concavity-matching nub is unioned onto the lid so plaster forms
+// around it.  An optional inset maker's mark is carved into the lid
+// from the top down.
+
+_base_total_h = plaster_thickness + wall_thickness;
+_base_z_top = z_min_scaled;
+_base_z_bot = _base_z_top - _base_total_h;
+
+// Emit concavity only when the reported concavity radius is materially
+// smaller than the foot ring's outer radius — otherwise the "concavity"
+// is really just the mug's hollow interior (radius ≈ foot_r) and a nub
+// of that size would swallow the whole cavity.
+_foot_r_unscaled = mug_body_profile[body_foot_inflection_idx][0];
+_has_real_concavity = foot_concavity_radius > 0
+    && foot_concavity_radius < _foot_r_unscaled - 0.5
+    && foot_concavity_z > (z_min_scaled / _cs) + 0.1;
+
+module base_outer_cylinder() {
+    translate([0, 0, _base_z_bot])
+        cylinder(h = _base_total_h, r = base_outer_r);
+}
+
+// Plaster cavity: a disc carved out, leaving wall_thickness of printed
+// material on each of bottom, sides, and top.  Top of cavity is at
+// z_min_scaled - wall_thickness (just under the lid), bottom at
+// z_base_bot + wall_thickness.
+module base_plaster_cavity_disc() {
+    _cav_bot = _base_z_bot + wall_thickness;
+    _cav_top = _base_z_top - wall_thickness;
+    translate([0, 0, _cav_bot])
+        cylinder(h = _cav_top - _cav_bot + epsilon, r = base_inner_r);
+}
+
+module base_concavity_positive() {
+    if (_has_real_concavity) {
+        _zc = foot_concavity_z * _cs;
+        _rc = foot_concavity_radius * _cs;
+        translate([0, 0, z_min_scaled - epsilon])
+            cylinder(h = _zc - z_min_scaled + epsilon, r = _rc);
+    }
+}
+
+// Maker's mark — the stamp polygon stays at design-size XY; only depth
+// and Z placement are applied here.  For inset marks (the default),
+// the stamp carves into the lid from z_min_scaled downward by
+// mark_depth, leaving a recess in the printed material.  Plaster
+// pours around it, forming a matching positive that presses a
+// recessed mark into the mug's foot.
+module base_mark_stamp() {
+    if (mark_enabled && len(mark_points) > 0) {
+        if (mark_inset) {
+            translate([0, 0, z_min_scaled - mark_depth])
+                linear_extrude(height = mark_depth + epsilon, convexity = 4)
+                    polygon(points = mark_points, paths = mark_paths);
+        } else {
+            // Relief: add a positive stamp protruding upward from the
+            // lid into the mug cavity so the plaster gets a recess.
+            translate([0, 0, z_min_scaled - epsilon])
+                linear_extrude(height = mark_depth + epsilon, convexity = 4)
+                    polygon(points = mark_points, paths = mark_paths);
+        }
+    }
+}
+
+module base_raw() {
+    difference() {
+        union() {
+            base_outer_cylinder();
+            base_concavity_positive();
+            if (mark_enabled && !mark_inset) base_mark_stamp();
+        }
+        base_plaster_cavity_disc();
+        if (mark_enabled && mark_inset) base_mark_stamp();
+    }
+}
+
+// Key convention on Z seam: upper halves (a/b) subtract bumps;
+// base carries the sockets.
+module base_part() {
+    if (_use_keys) {
+        union() {
+            base_raw();
+            z_seam_key_sockets();
+        }
+    } else {
+        difference() {
+            base_raw();
+            z_seam_natches();
+        }
+    }
+}
+
+// =====================================================================
+// TOP-LEVEL — Phase 7 verification render
 // =====================================================================
 a_part();
 // b_part();
+// base_part();
 // a_part_raw();
 // b_part_raw();
+// base_raw();
 // mug_positive_solid();
 // mug_inner_wall_solid();
 // shell_solid_geom();

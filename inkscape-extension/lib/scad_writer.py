@@ -243,6 +243,17 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
         if "mould_type" in params:
             lines.append(f"mould_type = {params['mould_type']};\n")
 
+    # Case-mould-efficient derived parameters
+    if want_case_mould_efficient:
+        if "needs_base" in params:
+            lines.append(
+                f"needs_base = {'true' if params['needs_base'] else 'false'};\n"
+            )
+        for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled",
+                    "base_outer_r", "base_inner_r"):
+            if key in params:
+                lines.append(f"{key} = {params[key]:.6f};\n")
+
     # Funnel parameters
     if want_funnel:
         for key in ("funnel_wall_angle", "funnel_wall", "flange_width",

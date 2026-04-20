@@ -395,6 +395,33 @@ class MugGeneratorEffect(inkex.EffectExtension):
         else:
             mould_params["mould_type"] = 2
 
+        # Case-mould-efficient derived parameters.  Uses the same
+        # 100/(100 - pct) clay-shrinkage formula as case_mould_original.scad
+        # so greenware dimensions compensate for fired shrinkage correctly.
+        _cs = 100.0 / (100.0 - shrinkage_pct) if shrinkage_pct > 0 else 1.0
+        outer_pts = scad_body_profile[:foot_idx + 1]
+        # Lip inflection: greatest z, tiebreak greatest radius.
+        lip_r, z_lip = max(outer_pts, key=lambda p: (p[1], p[0]))
+        # Foot inflection: least z, tiebreak greatest radius.
+        foot_r, z_min = max(outer_pts, key=lambda p: (-p[1], p[0]))
+        needs_base = bool(concavity) or bool(
+            mark_enabled and self.options.mark_inset
+        )
+        mould_params["needs_base"] = needs_base
+        mould_params["z_min_scaled"] = z_min * _cs
+        mould_params["z_lip_scaled"] = z_lip * _cs
+        mould_params["lip_r_scaled"] = lip_r * _cs
+        if needs_base:
+            scaled_foot_r = foot_r * _cs
+            mould_params["base_outer_r"] = (
+                scaled_foot_r
+                + self.options.plaster_thickness
+                + self.options.wall_thickness
+            )
+            mould_params["base_inner_r"] = (
+                scaled_foot_r + self.options.plaster_thickness
+            )
+
         # Selective export flags.  Each subsidiary rib is demoted to False
         # when its parent mould is unchecked, since the rib file includes
         # parameters that only exist alongside the mould.

@@ -198,6 +198,25 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     else:
         mould_params["mould_type"] = 2
 
+    _cs = 100.0 / (100.0 - clay_shrinkage) if clay_shrinkage > 0 else 1.0
+    outer_pts = scad_body_profile[:foot_idx + 1]
+    lip_r_raw, z_lip_raw = max(outer_pts, key=lambda p: (p[1], p[0]))
+    foot_r_raw, z_min_raw = max(outer_pts, key=lambda p: (-p[1], p[0]))
+    needs_base = bool(concavity) or bool(mark_enabled and mark_inset)
+    mould_params["needs_base"] = needs_base
+    mould_params["z_min_scaled"] = z_min_raw * _cs
+    mould_params["z_lip_scaled"] = z_lip_raw * _cs
+    mould_params["lip_r_scaled"] = lip_r_raw * _cs
+    if needs_base:
+        scaled_foot_r = foot_r_raw * _cs
+        mould_params["base_outer_r"] = (
+            scaled_foot_r + mould_params["plaster_thickness"]
+            + mould_params["wall_thickness"]
+        )
+        mould_params["base_inner_r"] = (
+            scaled_foot_r + mould_params["plaster_thickness"]
+        )
+
     handle_stations_mould: dict[str, list] = {}
     if handle_enabled:
         handle_stations_out = [
@@ -360,6 +379,28 @@ class TestIntegration:
                       "hump_mould_jiggering_rib.scad",
                       "slump_mould_jiggering_rib.scad"):
             assert (tmp_path / name).exists(), f"{name} not copied"
+
+    def test_efficient_mould_derived_params(self, tmp_path):
+        """mug_params.scad contains needs_base, z_min_scaled, z_lip_scaled,
+        lip_r_scaled when case_mould_efficient is exported.  Base-only
+        keys are present only when needs_base is true."""
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, clay_shrinkage=10.0)
+        text = (tmp_path / "mug_params.scad").read_text()
+        for key in ("needs_base", "z_min_scaled", "z_lip_scaled",
+                    "lip_r_scaled"):
+            assert key in text, f"{key} missing from mug_params.scad"
+
+        # Fixture has a concave foot; expect needs_base=true and base_*
+        # keys present.  z_min_scaled should be 10% larger than raw 20mm.
+        assert "needs_base = true" in text
+        assert "base_outer_r" in text
+        assert "base_inner_r" in text
+
+        import re
+        m = re.search(r"z_min_scaled\s*=\s*([\d.]+);", text)
+        assert m, "z_min_scaled value not parseable"
+        # raw z_min is 20mm; scaled by 100/(100-10) = 1.111...
+        assert abs(float(m.group(1)) - 20.0 * 100.0 / 90.0) < 1e-3
 
     def test_handle_stations_mould_four_variants(self, tmp_path):
         """handle_stations_mould.scad has four arrays with the expected

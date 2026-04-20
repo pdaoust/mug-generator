@@ -198,6 +198,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     else:
         mould_params["mould_type"] = 2
 
+    handle_stations_mould: dict[str, list] = {}
     if handle_enabled:
         handle_stations_out = [
             [[pt[0], pt[1], pt[2]] for pt in poly]
@@ -214,6 +215,30 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             [s.centroid[0], s.centroid[1], s.centroid[2]]
             for s in stations
         ]
+
+        from lib.handle_station_offsets import offset_stations as _offset_stations
+        from lib.handle_station_offsets import extend_station_endpoints as _extend_station_endpoints
+        wt = mould_params["wall_thickness"]
+        pt_plaster = mould_params["plaster_thickness"]
+        variant_offsets = [
+            ("handle_stations_body_positive", 0.0, False),
+            ("handle_stations_body_inner_wall", -wt, True),
+            ("handle_stations_shell_solid", pt_plaster, False),
+            ("handle_stations_shell_outer_wall", pt_plaster + wt, False),
+        ]
+        for name, d, extend_ends in variant_offsets:
+            variant_stations = _offset_stations(stations, d)
+            if extend_ends:
+                variant_stations = _extend_station_endpoints(variant_stations, wt)
+            polys = generate_handle_stations(
+                handle_profile, variant_stations,
+                mug_axis_x=mug_surface.axis_x,
+                mug_radius_at_z=mug_true_radius_at_z,
+            )
+            handle_stations_mould[name] = [
+                [[pt[0], pt[1], pt[2]] for pt in poly]
+                for poly in polys
+            ]
     else:
         handle_stations_out = []
         handle_path_out = []
@@ -232,6 +257,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "mug_body_profile": scad_body_profile,
         "mark_polygons": mark_polygons if mark_enabled else None,
         "handle_stations": handle_stations_out,
+        "handle_stations_mould": handle_stations_mould,
         "handle_path": handle_path_out,
         "mug_params": {
             "fn": fn,
@@ -334,6 +360,48 @@ class TestIntegration:
                       "hump_mould_jiggering_rib.scad",
                       "slump_mould_jiggering_rib.scad"):
             assert (tmp_path / name).exists(), f"{name} not copied"
+
+    def test_handle_stations_mould_four_variants(self, tmp_path):
+        """handle_stations_mould.scad has four arrays with the expected
+        relative extents and endpoint counts."""
+        _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
+        text = (tmp_path / "handle_stations_mould.scad").read_text()
+        names = (
+            "handle_stations_body_positive",
+            "handle_stations_body_inner_wall",
+            "handle_stations_shell_solid",
+            "handle_stations_shell_outer_wall",
+        )
+        arrays = {n: _parse_scad_array(text, n) for n in names}
+
+        # Endpoint count: body_inner_wall has two extra stations; the
+        # other three share the same count.
+        base_n = len(arrays["handle_stations_body_positive"])
+        assert base_n > 2
+        assert len(arrays["handle_stations_body_inner_wall"]) == base_n + 2
+        assert len(arrays["handle_stations_shell_solid"]) == base_n
+        assert len(arrays["handle_stations_shell_outer_wall"]) == base_n
+
+        # sx/sz monotonicity at matching stations: outer_wall > solid >
+        # body_positive > inner_wall.  Measure by XY-plane diameter of
+        # the station polygon.
+        def _bbox_diag(poly):
+            xs = [p[0] for p in poly]
+            ys = [p[1] for p in poly]
+            zs = [p[2] for p in poly]
+            return (max(xs) - min(xs)) + (max(ys) - min(ys)) + (max(zs) - min(zs))
+
+        # Compare interior stations (skip endpoints so inner_wall's
+        # extra stations don't confuse the alignment).
+        for i in range(1, base_n - 1):
+            bp = _bbox_diag(arrays["handle_stations_body_positive"][i])
+            iw = _bbox_diag(arrays["handle_stations_body_inner_wall"][i + 1])
+            ss = _bbox_diag(arrays["handle_stations_shell_solid"][i])
+            sow = _bbox_diag(arrays["handle_stations_shell_outer_wall"][i])
+            assert iw < bp < ss < sow, (
+                f"Station {i} extents not monotonic: "
+                f"iw={iw:.3f} bp={bp:.3f} ss={ss:.3f} sow={sow:.3f}"
+            )
 
     def test_jiggering_params_in_mug_params(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)

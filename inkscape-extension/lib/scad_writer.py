@@ -110,6 +110,43 @@ def _emit_handle_stations(data: dict[str, Any], output_dir: Path) -> None:
 
 
 @emitter(
+    "handle_stations_mould",
+    needs=lambda ex: _any(ex, "case_mould_efficient"),
+)
+def _emit_handle_stations_mould(data: dict[str, Any], output_dir: Path) -> None:
+    """Emit handle_stations_mould.scad with four offset variants.
+
+    The dict value at ``handle_stations_mould`` holds four named lists of
+    polygon stations, one per offset variant consumed by
+    ``case_mould_efficient.scad``.
+    """
+    variants = data.get("handle_stations_mould") or {}
+    names = (
+        "handle_stations_body_positive",
+        "handle_stations_body_inner_wall",
+        "handle_stations_shell_solid",
+        "handle_stations_shell_outer_wall",
+    )
+    lines = [HEADER]
+    for name in names:
+        stations = variants.get(name, [])
+        if not stations:
+            lines.append(f"{name} = [];\n")
+            continue
+        lines.append(f"{name} = [\n")
+        for si, poly in enumerate(stations):
+            lines.append("  [\n")
+            for pi, pt in enumerate(poly):
+                comma = "," if pi < len(poly) - 1 else ""
+                lines.append(f"    {_format_point_3d(pt)}{comma}\n")
+            comma = "," if si < len(stations) - 1 else ""
+            lines.append(f"  ]{comma}\n")
+        lines.append("];\n")
+
+    (output_dir / "handle_stations_mould.scad").write_text("".join(lines))
+
+
+@emitter(
     "handle_path",
     needs=lambda ex: _any(ex, "prototype"),
 )

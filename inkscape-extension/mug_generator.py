@@ -33,6 +33,7 @@ from lib.scad_writer import run_all_emitters
 from lib.preview import draw_preview
 from lib.handle_nudge import nudge_handle_stations
 from lib.profile_split import split_body_profile
+from lib.handle_station_offsets import offset_stations, extend_station_endpoints
 
 
 class MugGeneratorEffect(inkex.EffectExtension):
@@ -295,6 +296,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Data is emitted at actual (fired) size; clay shrinkage scaling
         # is applied in the mould/funnel SCAD files.
         scad_body_profile = [[p[0], p[1]] for p in body_profile]
+        handle_stations_mould: dict[str, list] = {}
         if handle_enabled:
             handle_stations_out = [
                 [[pt[0], pt[1], pt[2]] for pt in poly]
@@ -312,6 +314,29 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 [s.centroid[0], s.centroid[1], s.centroid[2]]
                 for s in stations
             ]
+
+            # Four offset station variants consumed by case_mould_efficient.scad
+            wt = self.options.wall_thickness
+            pt = self.options.plaster_thickness
+            variant_offsets = [
+                ("handle_stations_body_positive", 0.0, False),
+                ("handle_stations_body_inner_wall", -wt, True),
+                ("handle_stations_shell_solid", pt, False),
+                ("handle_stations_shell_outer_wall", pt + wt, False),
+            ]
+            for name, d, extend_ends in variant_offsets:
+                variant_stations = offset_stations(stations, d)
+                if extend_ends:
+                    variant_stations = extend_station_endpoints(variant_stations, wt)
+                polys = generate_handle_stations(
+                    handle_profile, variant_stations,
+                    mug_axis_x=mug_surface.axis_x,
+                    mug_radius_at_z=mug_true_radius_at_z,
+                )
+                handle_stations_mould[name] = [
+                    [[pt[0], pt[1], pt[2]] for pt in poly]
+                    for poly in polys
+                ]
         else:
             handle_stations_out = []
             handle_path_out = []
@@ -390,6 +415,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "exports": exports,
             "mug_body_profile": scad_body_profile,
             "handle_stations": handle_stations_out,
+            "handle_stations_mould": handle_stations_mould,
             "handle_path": handle_path_out,
             "mark_polygons": mark_polygons if mark_enabled else None,
             "mug_params": {

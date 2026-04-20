@@ -34,6 +34,7 @@ def _parse_scad_array(text: str, var_name: str):
 DEFAULT_EXPORTS = {
     "prototype": True,
     "case_mould": True,
+    "case_mould_efficient": True,
     "funnel": True,
     "slump_mould": True,
     "slump_rib": True,
@@ -324,7 +325,8 @@ class TestIntegration:
 
     def test_case_mould_scad_copied(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
-        assert (tmp_path / "case_mould.scad").exists()
+        assert (tmp_path / "case_mould_original.scad").exists()
+        assert (tmp_path / "case_mould_efficient.scad").exists()
 
     def test_new_scad_files_copied(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
@@ -441,7 +443,7 @@ class TestIntegration:
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         mug_text = (tmp_path / "mug.scad").read_text()
         assert "snap_to_mug" in mug_text
-        mould_text = (tmp_path / "case_mould.scad").read_text()
+        mould_text = (tmp_path / "case_mould_original.scad").read_text()
         assert "snap_to_mug" in mould_text
 
 
@@ -456,7 +458,8 @@ class TestSelectiveExport:
         assert (tmp_path / "mug_params.scad").exists()
         assert (tmp_path / "mug_body_profile.scad").exists()
 
-        for name in ("mug.scad", "case_mould.scad", "slump_mould.scad",
+        for name in ("mug.scad", "case_mould_original.scad",
+                     "case_mould_efficient.scad", "slump_mould.scad",
                      "hump_mould.scad", "slump_mould_jiggering_rib.scad",
                      "hump_mould_jiggering_rib.scad"):
             assert not (tmp_path / name).exists(), f"{name} should not be copied"
@@ -501,7 +504,7 @@ class TestSelectiveExport:
         assert "mark_depth" not in text
 
     def test_case_mould_volumes_are_sane(self, tmp_path):
-        """Render case_mould.scad with openscad-nightly and check that the
+        """Render case_mould_original.scad with openscad-nightly and check that the
         echoed volumes fall in plausible ranges for the fixture mug."""
         openscad = shutil.which("openscad-nightly") or shutil.which("openscad")
         if not openscad:
@@ -515,7 +518,7 @@ class TestSelectiveExport:
             result = subprocess.run(
                 [openscad, "-o", str(home_tmp / "out.stl"),
                  "--export-format", "binstl",
-                 str(home_tmp / "case_mould.scad")],
+                 str(home_tmp / "case_mould_original.scad")],
                 capture_output=True, text=True, timeout=120,
             )
         finally:
@@ -572,4 +575,5 @@ class TestSelectiveExport:
         assert (tmp_path / "handle_path.scad").exists()
         assert (tmp_path / "mark_polygon.scad").exists()
         assert not (tmp_path / "funnel.scad").exists()
-        assert not (tmp_path / "case_mould.scad").exists()
+        assert not (tmp_path / "case_mould_original.scad").exists()
+        assert not (tmp_path / "case_mould_efficient.scad").exists()

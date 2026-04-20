@@ -51,6 +51,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--natch_radius", type=float, default=6.75)
         pars.add_argument("--key_tolerance", type=float, default=0.5)
         pars.add_argument("--filler_tube_height", type=float, default=15.0)
+        pars.add_argument("--filler_tube_angle", type=float, default=20.0)
         pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
         pars.add_argument("--funnel_wall", type=float, default=1.5)
         pars.add_argument("--flange_width", type=float, default=3.0)
@@ -70,6 +71,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--hump_rib_direction", type=str, default="top")
         pars.add_argument("--export_prototype", type=inkex.Boolean, default=True)
         pars.add_argument("--export_case_mould", type=inkex.Boolean, default=True)
+        pars.add_argument("--export_case_mould_efficient", type=inkex.Boolean, default=True)
         pars.add_argument("--export_funnel", type=inkex.Boolean, default=True)
         pars.add_argument("--export_slump_mould", type=inkex.Boolean, default=True)
         pars.add_argument("--export_slump_rib", type=inkex.Boolean, default=True)
@@ -375,6 +377,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
         exports = {
             "prototype": bool(opt.export_prototype),
             "case_mould": bool(opt.export_case_mould),
+            "case_mould_efficient": bool(opt.export_case_mould_efficient),
             "funnel": bool(opt.export_funnel),
             "slump_mould": bool(opt.export_slump_mould),
             "slump_rib": bool(opt.export_slump_mould and opt.export_slump_rib),
@@ -396,6 +399,7 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 "axis_x": mug_surface.axis_x,
                 "body_foot_idx": foot_idx,
                 "filler_tube_height": self.options.filler_tube_height,
+                "filler_tube_angle": self.options.filler_tube_angle,
                 "clay_shrinkage_pct": shrinkage_pct,
                 "handle_enabled": handle_enabled,
                 "mark_enabled": mark_enabled,

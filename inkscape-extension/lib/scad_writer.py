@@ -30,7 +30,8 @@ def emitter(name: str, needs: Callable[[dict[str, bool]], bool] | None = None):
 # Files not in this map are always copied (shared helpers).
 EXPORT_TO_SCAD: dict[str, str] = {
     "mug.scad": "prototype",
-    "case_mould.scad": "case_mould",
+    "case_mould_original.scad": "case_mould",
+    "case_mould_efficient.scad": "case_mould_efficient",
     "funnel.scad": "funnel",
     "slump_mould.scad": "slump_mould",
     "slump_mould_jiggering_rib.scad": "slump_rib",
@@ -86,7 +87,7 @@ def _emit_mug_body_profile(data: dict[str, Any], output_dir: Path) -> None:
 
 @emitter(
     "handle_stations",
-    needs=lambda ex: _any(ex, "prototype", "case_mould"),
+    needs=lambda ex: _any(ex, "prototype", "case_mould", "case_mould_efficient"),
 )
 def _emit_handle_stations(data: dict[str, Any], output_dir: Path) -> None:
     """Emit handle_stations.scad."""
@@ -143,14 +144,16 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
 
     if exports is None:
         # No selection supplied — emit everything (backwards-compatible).
-        want_case_mould = want_mould_any = want_filler_tube = True
+        want_case_mould = want_case_mould_efficient = True
+        want_mould_any = want_filler_tube = True
         want_funnel = want_mark = want_rib = want_hump_rib = True
     else:
-        want_case_mould = exports.get("case_mould", False)
-        want_mould_any = _any(exports, "case_mould", "slump_mould", "hump_mould")
-        want_filler_tube = _any(exports, "case_mould", "funnel")
+        want_case_mould = _any(exports, "case_mould", "case_mould_efficient")
+        want_case_mould_efficient = exports.get("case_mould_efficient", False)
+        want_mould_any = _any(exports, "case_mould", "case_mould_efficient", "slump_mould", "hump_mould")
+        want_filler_tube = _any(exports, "case_mould", "case_mould_efficient", "funnel")
         want_funnel = exports.get("funnel", False)
-        want_mark = _any(exports, "prototype", "case_mould", "slump_mould")
+        want_mark = _any(exports, "prototype", "case_mould", "case_mould_efficient", "slump_mould")
         want_rib = _any(exports, "slump_rib", "hump_rib")
         want_hump_rib = exports.get("hump_rib", False)
 
@@ -184,9 +187,11 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
             if key in params:
                 lines.append(f"{key} = {params[key]:.6f};\n")
 
-    # filler_tube_height is consumed by the case mould and the funnel
+    # filler_tube_height / angle is consumed by the case mould and the funnel
     if want_filler_tube and "filler_tube_height" in params:
         lines.append(f"filler_tube_height = {params['filler_tube_height']:.6f};\n")
+    if want_filler_tube and "filler_tube_angle" in params:
+        lines.append(f"filler_tube_angle = {params['filler_tube_angle']:.6f};\n")
 
     # Case-mould-only parameters
     if want_case_mould:
@@ -235,7 +240,7 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
 
 @emitter(
     "mark_polygon",
-    needs=lambda ex: _any(ex, "prototype", "case_mould", "slump_mould"),
+    needs=lambda ex: _any(ex, "prototype", "case_mould", "case_mould_efficient", "slump_mould"),
 )
 def _emit_mark_polygon(data: dict[str, Any], output_dir: Path) -> None:
     """Emit mark_polygon.scad with flat points + paths arrays.

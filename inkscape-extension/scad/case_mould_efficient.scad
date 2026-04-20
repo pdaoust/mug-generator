@@ -139,10 +139,70 @@ module shell_outer_wall_solid() {
 }
 
 // =====================================================================
-// TOP-LEVEL — Phase 4 verification render
+// HALF-SPACE HELPERS
+// =====================================================================
+// Large cubes used to slice the composite solids at the A/B seam
+// (Y = 0 plane) and, when ``needs_base`` is true, at the Z seam
+// (z = z_min_scaled plane).
+
+big = 2000;
+
+module half_space_y_pos(y_cut) {
+    translate([-big / 2, y_cut, -big / 2])
+        cube([big, big, big]);
+}
+
+module half_space_z_pos(z_cut) {
+    translate([-big / 2, -big / 2, z_cut])
+        cube([big, big, big]);
+}
+
+// =====================================================================
+// A/B RAW PART
+// =====================================================================
+// ab_raw() is the A-side half-shell with no registration features.
+// Outer_half (shell_outer_wall_solid minus mug_inner_wall_solid)
+// extends ``wall_thickness`` past the seam planes (Y ≥ −wall_thickness,
+// and below z_min_scaled by wall_thickness when needs_base).  Inner_half
+// (shell_solid_geom minus mug_positive_solid) is flush at Y=0 and
+// z_min_scaled.  Subtracting one from the other leaves a wall of
+// thickness ``wall_thickness`` along the seam planes — an annular wall
+// at the A/B seam (no wall inside the mug cavity, so slip can flow)
+// and, when needs_base, a floor at the Z seam.
+
+module ab_raw() {
+    difference() {
+        // outer_half: shell skin + extended seam/floor
+        intersection() {
+            difference() {
+                shell_outer_wall_solid();
+                mug_inner_wall_solid();
+            }
+            half_space_y_pos(-wall_thickness);
+            if (needs_base) half_space_z_pos(z_min_scaled - wall_thickness);
+        }
+        // inner_half: plaster cavity, flush at seam / z_min
+        intersection() {
+            difference() {
+                shell_solid_geom();
+                mug_positive_solid();
+            }
+            half_space_y_pos(0);
+            if (needs_base) half_space_z_pos(z_min_scaled);
+        }
+    }
+}
+
+module a_part_raw() { ab_raw(); }
+module b_part_raw() { mirror([0, 1, 0]) ab_raw(); }
+
+// =====================================================================
+// TOP-LEVEL — Phase 5 verification render
 // =====================================================================
 // Uncomment one at a time to inspect.
-mug_positive_solid();
+a_part_raw();
+// b_part_raw();
+// mug_positive_solid();
 // mug_inner_wall_solid();
 // shell_solid_geom();
 // shell_outer_wall_solid();

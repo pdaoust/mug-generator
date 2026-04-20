@@ -242,21 +242,27 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 self.options.fn, self.options.fa, self.options.fs, mid_total
             )
 
-            # Re-parse with bezier subdivision matching OpenSCAD resolution
+            # Re-parse with bezier subdivision matching OpenSCAD resolution.
+            # Body profile is revolved; its 2D tessellation only needs linear
+            # resolution, so an `fs` floor applies even in $fn mode to prevent
+            # high $fn from over-subdividing gently-curved beziers (the
+            # chord-angle criterion scales with chord length).
+            # Handle profile becomes each sweep station's cross-section polygon;
+            # cap its `fa` so $fa=12° default still gives dense stations.
             from lib.units import to_mm as _to_mm
 
             mm_per_svg = _to_mm(scale, doc_units)
+            svg_fs_body = (self.options.fs / mm_per_svg) if mm_per_svg > 0 else 2.0
             if self.options.fn > 0:
-                svg_fa = 360.0 / self.options.fn
-                svg_fs = None
+                svg_fa_body = 360.0 / self.options.fn
             else:
-                svg_fa = self.options.fa
-                svg_fs = self.options.fs / mm_per_svg if mm_per_svg > 0 else None
+                svg_fa_body = self.options.fa
+            svg_fa_handle = min(svg_fa_body, 7.2)
 
             mug_body_paths = get_layer_paths(svg, "mug body",
-                                             fa_deg=svg_fa, fs=svg_fs)
+                                             fa_deg=svg_fa_body, fs=svg_fs_body)
             profile_paths = get_layer_paths(svg, "handle profile",
-                                            fa_deg=svg_fa, fs=svg_fs)
+                                            fa_deg=svg_fa_handle, fs=None)
             body_mm = svg_to_mm(mug_body_paths[0])
             body_profile, foot_idx = split_body_profile(body_mm)
             mug_outer_mm = body_profile[:foot_idx + 1]
@@ -272,19 +278,20 @@ class MugGeneratorEffect(inkex.EffectExtension):
             )
 
         else:
-            # Re-parse mug body with bezier subdivision even without handle
+            # Re-parse mug body with bezier subdivision even without handle.
+            # See the handle branch above for the body-vs-handle tolerance
+            # rationale.
             from lib.units import to_mm as _to_mm
 
             mm_per_svg = _to_mm(scale, doc_units)
+            svg_fs_body = (self.options.fs / mm_per_svg) if mm_per_svg > 0 else 2.0
             if self.options.fn > 0:
-                svg_fa = 360.0 / self.options.fn
-                svg_fs = None
+                svg_fa_body = 360.0 / self.options.fn
             else:
-                svg_fa = self.options.fa
-                svg_fs = self.options.fs / mm_per_svg if mm_per_svg > 0 else None
+                svg_fa_body = self.options.fa
 
             mug_body_paths = get_layer_paths(svg, "mug body",
-                                             fa_deg=svg_fa, fs=svg_fs)
+                                             fa_deg=svg_fa_body, fs=svg_fs_body)
             body_mm = svg_to_mm(mug_body_paths[0])
             body_profile, foot_idx = split_body_profile(body_mm)
             mug_outer_mm = body_profile[:foot_idx + 1]

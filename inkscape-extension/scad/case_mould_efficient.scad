@@ -492,15 +492,76 @@ module base_part() {
 }
 
 // =====================================================================
-// TOP-LEVEL — Phase 7 verification render
+// PLASTER VOLUME ESTIMATES — always emitted
 // =====================================================================
-a_part();
-// b_part();
-// base_part();
-// a_part_raw();
-// b_part_raw();
-// base_raw();
-// mug_positive_solid();
-// mug_inner_wall_solid();
-// shell_solid_geom();
-// shell_outer_wall_solid();
+// Low-res VNFs are sufficient for volume estimates.  Axisymmetric plaster
+// volume = revolve(plaster_thickness) − revolve(0) − filler_tube_inside_shell.
+// Handle plaster = handle_stations_shell_solid − handle_stations_body_positive.
+// Base plaster = π·base_inner_r²·plaster_thickness − concavity nub.
+
+_vol_fn = 24;
+
+_vnf_shell_axi = rotate_sweep(offset_profile(plaster_thickness), $fn=_vol_fn);
+_vnf_mug_axi   = rotate_sweep(offset_profile(0),                 $fn=_vol_fn);
+_v_shell_axi = abs(vnf_volume(_vnf_shell_axi));
+_v_mug_axi   = abs(vnf_volume(_vnf_mug_axi));
+
+// Filler tube portion lying inside the axisymmetric shell halo
+// (z_lip .. z_lip + plaster_thickness).
+_ft_r_bot    = lip_r_scaled;
+_ft_h_in     = min(filler_tube_height, plaster_thickness);
+_ft_r_top_in = _ft_r_bot + _ft_h_in * tan(filler_tube_angle);
+_v_filler_in = (PI * _ft_h_in / 3)
+    * (_ft_r_bot*_ft_r_bot + _ft_r_bot*_ft_r_top_in + _ft_r_top_in*_ft_r_top_in);
+
+_vnf_handle_pos = handle_enabled
+    ? skin(handle_stations_body_positive, slices=0, caps=true)
+    : EMPTY_VNF;
+_vnf_handle_shell = handle_enabled
+    ? skin(handle_stations_shell_solid, slices=0, caps=true)
+    : EMPTY_VNF;
+_v_handle_pos   = handle_enabled ? abs(vnf_volume(_vnf_handle_pos))   : 0;
+_v_handle_shell = handle_enabled ? abs(vnf_volume(_vnf_handle_shell)) : 0;
+
+_v_plaster_ab_total = (_v_shell_axi - _v_mug_axi - _v_filler_in)
+                    + (_v_handle_shell - _v_handle_pos);
+_v_ab_half = _v_plaster_ab_total / 2;
+
+_v_concavity = _has_real_concavity
+    ? PI * pow(foot_concavity_radius * _cs, 2)
+          * (foot_concavity_z * _cs - z_min_scaled)
+    : 0;
+_v_base_plaster = needs_base
+    ? PI * base_inner_r * base_inner_r * plaster_thickness - _v_concavity
+    : 0;
+
+_v_total_plaster = 2 * _v_ab_half + _v_base_plaster;
+
+echo(str(""));
+echo(str("=== PLASTER VOLUME ESTIMATES ==="));
+echo(str("  Half A:  ", round(_v_ab_half / 1000), " mL"));
+echo(str("  Half B:  ", round(_v_ab_half / 1000), " mL"));
+if (needs_base)
+    echo(str("  Base:    ", round(_v_base_plaster / 1000), " mL"));
+echo(str("  Total:   ", round(_v_total_plaster / 1000), " mL"));
+echo(str("================================"));
+
+// =====================================================================
+// TOP-LEVEL RENDER
+// =====================================================================
+// "all"  — assembled view (A at +Y, B at -Y, base below): diagnostic
+// "a"    — A half alone
+// "b"    — B half alone
+// "base" — base alone (rendered only when needs_base)
+render_part = "all";
+
+module render_all() {
+    a_part();
+    b_part();
+    if (needs_base) base_part();
+}
+
+if (render_part == "all")       render_all();
+else if (render_part == "a")    a_part();
+else if (render_part == "b")    b_part();
+else if (render_part == "base") base_part();

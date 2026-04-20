@@ -197,10 +197,206 @@ module a_part_raw() { ab_raw(); }
 module b_part_raw() { mirror([0, 1, 0]) ab_raw(); }
 
 // =====================================================================
-// TOP-LEVEL — Phase 5 verification render
+// REGISTRATION FEATURES
 // =====================================================================
-// Uncomment one at a time to inspect.
-a_part_raw();
+// Three A/B seam features (all on Y=0 plane):
+//   F1 handle-side upper: Z just inside filler tube; +X
+//   F2 handle-side lower: Z just inside foot; +X
+//   F3 opposite-side mid: Z mid-body; -X
+// When needs_base, two Z-seam features on z = z_min_scaled plane at ±Y.
+
+_use_keys = (alignment_type == "keys");
+_key_tol_half = _use_keys ? key_tolerance / 2 : 0;
+_key_r_bump   = natch_radius - _key_tol_half;
+_key_r_socket = natch_radius + _key_tol_half;
+
+// Walk the scaled body profile to interpolate mug radius at z. The
+// profile runs lip → foot inflection; z is monotone decreasing.
+function _mug_r_at_z(z) =
+    let(
+        prof = [for (i = [0:body_foot_inflection_idx])
+                  [mug_body_profile[i][0] * _cs,
+                   mug_body_profile[i][1] * _cs]],
+        n = len(prof),
+        // Clamp to endpoints.
+        zc = max(min(z, prof[0][1]), prof[n-1][1])
+    )
+    [for (i = [0:n-2])
+        if ((prof[i][1] >= zc && prof[i+1][1] <= zc)
+         || (prof[i][1] <= zc && prof[i+1][1] >= zc))
+            let(
+                dz = prof[i+1][1] - prof[i][1],
+                t = abs(dz) < epsilon ? 0 : (zc - prof[i][1]) / dz
+            ) prof[i][0] + t * (prof[i+1][0] - prof[i][0])
+    ][0];
+
+// Inner shell radius at z = mug_r + plaster_thickness (along horizontal,
+// exact for vertical walls; close enough for gently tapered walls).
+function _feature_x_at_z(z) = _mug_r_at_z(z) + plaster_thickness / 2;
+
+_f1_z = z_lip_scaled + filler_tube_height - plaster_thickness / 2;
+_f2_z = z_min_scaled + (needs_base ? wall_thickness : 0) + plaster_thickness / 2;
+_f3_z = (z_min_scaled + z_lip_scaled) / 2;
+
+_f1_pos = [ _feature_x_at_z(_f1_z), 0, _f1_z];
+_f2_pos = [ _feature_x_at_z(_f2_z), 0, _f2_z];
+_f3_pos = [-_feature_x_at_z(_f3_z), 0, _f3_z];
+
+// Z-seam feature Y position: halfway between mug radius and inner shell
+// radius at the foot inflection Z.
+_zs_y = _feature_x_at_z(z_min_scaled);
+_zs1_pos = [0,  _zs_y, z_min_scaled];
+_zs2_pos = [0, -_zs_y, z_min_scaled];
+
+// --- Primitives ---
+module _natch_cyl(r, h) {
+    cylinder(r = r, h = h, center = true, $fn = 32);
+}
+
+module _hemisphere(r) {
+    difference() {
+        sphere(r = r, $fn = 32);
+        translate([0, 0, -r]) cube(2 * r, center = true);
+    }
+}
+
+module _teardrop_cone(r, rot) {
+    _cr = sin(45) * r;
+    intersection() {
+        rotate(rot)
+            translate([0, 0, _cr])
+                cylinder(h = _cr, r1 = _cr, r2 = 0, $fn = 32);
+        translate([0, 0, -500 + 0.005]) cube(1000, center = true);
+    }
+}
+
+// Seam natch: cylinder perpendicular to Y=0 plane.
+module _seam_natch(pos) {
+    translate(pos)
+        rotate([90, 0, 0])
+            _natch_cyl(natch_radius, natch_radius * 2);
+}
+
+// Seam key: hemisphere + optional teardrop, pointing into +Y (socket on A)
+// or mirrored to -Y (bump on B done via mirror of whole part).
+// For the half-split efficient mould, each part has seam-wall material
+// on only one side of Y=0.  Using a full sphere (instead of a hemisphere)
+// lets the -Y half fuse with A's seam wall while the +Y half protrudes
+// as the mating bump.  On B we subtract a smaller sphere to form the
+// matching recess in the mating face.
+module _seam_key_socket(pos) {
+    translate(pos) sphere(r = _key_r_socket, $fn = 32);
+}
+module _seam_key_bump(pos) {
+    translate(pos) sphere(r = _key_r_bump, $fn = 32);
+}
+
+// Z-seam natch: vertical cylinder crossing z = z_min_scaled plane.
+module _zseam_natch(pos) {
+    translate(pos) _natch_cyl(natch_radius, natch_radius * 2);
+}
+// Z-seam keys: same sphere approach as A/B seam — upper halves have
+// bumps extending into -Z (toward the base part); base part carries
+// the sockets.
+module _zseam_key_socket(pos) {
+    translate(pos) sphere(r = _key_r_socket, $fn = 32);
+}
+module _zseam_key_bump(pos) {
+    translate(pos) sphere(r = _key_r_bump, $fn = 32);
+}
+
+// --- Feature groupings (A-side geometry; B-side uses mirror of whole part) ---
+// A-side convention: sockets are keys on A (positive union → plaster recess),
+// bumps live on B (which is mirror of A with bumps substituted).  Natches are
+// symmetric — same cylinder on both halves.
+
+module ab_seam_natches() {
+    _seam_natch(_f1_pos);
+    _seam_natch(_f2_pos);
+    _seam_natch(_f3_pos);
+}
+
+module ab_seam_key_sockets() {
+    _seam_key_socket(_f1_pos);
+    _seam_key_socket(_f2_pos);
+    _seam_key_socket(_f3_pos);
+}
+
+module ab_seam_key_bumps() {
+    _seam_key_bump(_f1_pos);
+    _seam_key_bump(_f2_pos);
+    _seam_key_bump(_f3_pos);
+}
+
+module z_seam_natches() {
+    _zseam_natch(_zs1_pos);
+    _zseam_natch(_zs2_pos);
+}
+
+module z_seam_key_sockets() {
+    _zseam_key_socket(_zs1_pos);
+    _zseam_key_socket(_zs2_pos);
+}
+
+module z_seam_key_bumps() {
+    _zseam_key_bump(_zs1_pos);
+    _zseam_key_bump(_zs2_pos);
+}
+
+// --- Final parts ---
+// A-side: keys → union sockets; natches → subtract natches.
+// B-side: mirror of A, with keys inverted (subtract bumps instead of
+// unioning sockets).  Natch case is symmetric.
+
+// Key convention: upper halves (a/b) carry ab-seam sockets or bumps,
+// and z-seam bumps subtracted (base part owns the z-seam sockets).
+
+module _b_ab_seam_bumps() {
+    _seam_key_bump(_f1_pos);
+    _seam_key_bump(_f2_pos);
+    _seam_key_bump(_f3_pos);
+}
+
+module a_part() {
+    if (_use_keys) {
+        difference() {
+            union() {
+                a_part_raw();
+                ab_seam_key_sockets();
+            }
+            if (needs_base) z_seam_key_bumps();
+        }
+    } else {
+        difference() {
+            a_part_raw();
+            ab_seam_natches();
+            if (needs_base) z_seam_natches();
+        }
+    }
+}
+
+module b_part() {
+    if (_use_keys) {
+        difference() {
+            b_part_raw();
+            _b_ab_seam_bumps();
+            if (needs_base) z_seam_key_bumps();
+        }
+    } else {
+        difference() {
+            b_part_raw();
+            ab_seam_natches();
+            if (needs_base) z_seam_natches();
+        }
+    }
+}
+
+// =====================================================================
+// TOP-LEVEL — Phase 6 verification render
+// =====================================================================
+a_part();
+// b_part();
+// a_part_raw();
 // b_part_raw();
 // mug_positive_solid();
 // mug_inner_wall_solid();

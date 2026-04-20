@@ -202,6 +202,10 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     outer_pts = scad_body_profile[:foot_idx + 1]
     lip_r_raw, z_lip_raw = max(outer_pts, key=lambda p: (p[1], p[0]))
     foot_r_raw, z_min_raw = max(outer_pts, key=lambda p: (-p[1], p[0]))
+    mould_params["body_foot_inflection_idx"] = max(
+        range(len(outer_pts)),
+        key=lambda i: (-outer_pts[i][1], outer_pts[i][0]),
+    )
     needs_base = bool(concavity) or bool(mark_enabled and mark_inset)
     mould_params["needs_base"] = needs_base
     mould_params["z_min_scaled"] = z_min_raw * _cs
@@ -285,6 +289,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
             "axis_x": mug_surface.axis_x,
             "body_foot_idx": foot_idx,
             "filler_tube_height": filler_tube_height,
+            "filler_tube_angle": 20.0,
             "clay_shrinkage_pct": clay_shrinkage,
             "handle_enabled": handle_enabled,
             "rib_thickness": 2.0,

@@ -249,6 +249,10 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
             lines.append(
                 f"needs_base = {'true' if params['needs_base'] else 'false'};\n"
             )
+        if "body_foot_inflection_idx" in params:
+            lines.append(
+                f"body_foot_inflection_idx = {params['body_foot_inflection_idx']};\n"
+            )
         for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled",
                     "base_outer_r", "base_inner_r"):
             if key in params:

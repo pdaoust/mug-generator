@@ -404,6 +404,15 @@ class MugGeneratorEffect(inkex.EffectExtension):
         lip_r, z_lip = max(outer_pts, key=lambda p: (p[1], p[0]))
         # Foot inflection: least z, tiebreak greatest radius.
         foot_r, z_min = max(outer_pts, key=lambda p: (-p[1], p[0]))
+        # Index of foot inflection in the outer slice — the efficient
+        # mould's closed half-profile runs body[0..foot_inflection_idx]
+        # and drops any tucked-in concavity below it (handled by the
+        # base part instead).
+        foot_inflection_idx = max(
+            range(len(outer_pts)),
+            key=lambda i: (-outer_pts[i][1], outer_pts[i][0]),
+        )
+        mould_params["body_foot_inflection_idx"] = foot_inflection_idx
         needs_base = bool(concavity) or bool(
             mark_enabled and self.options.mark_inset
         )

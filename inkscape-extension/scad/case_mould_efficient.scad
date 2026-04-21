@@ -549,19 +549,27 @@ echo(str("================================"));
 // =====================================================================
 // TOP-LEVEL RENDER
 // =====================================================================
-// "all"  — assembled view (A at +Y, B at -Y, base below): diagnostic
-// "a"    — A half alone
-// "b"    — B half alone
-// "base" — base alone (rendered only when needs_base)
+// Every render mode sits the part(s) on the Z=0 plane.  In "all" mode
+// A and B are nudged apart in Y so their seam walls don't fuse and the
+// halves are individually visible.
+// "all"  — diagnostic view (A at +Y, B at -Y, base at origin)
+// "a"    — A half alone, min Z = 0
+// "b"    — B half alone, min Z = 0
+// "base" — base alone (only when needs_base), min Z = 0
 render_part = "all";
 
+// Bottom of A/B (no floor yet; bug #2 will add wt/2 floor below z_min).
+_ab_z_bot = z_min_scaled;
+_render_split_gap = 10;
+
 module render_all() {
-    a_part();
-    b_part();
-    if (needs_base) base_part();
+    translate([0,  _render_split_gap, -_ab_z_bot])   a_part();
+    translate([0, -_render_split_gap, -_ab_z_bot])   b_part();
+    if (needs_base)
+        translate([0, 0, -_base_z_bot])              base_part();
 }
 
 if (render_part == "all")       render_all();
-else if (render_part == "a")    a_part();
-else if (render_part == "b")    b_part();
-else if (render_part == "base") base_part();
+else if (render_part == "a")    translate([0, 0, -_ab_z_bot])   a_part();
+else if (render_part == "b")    translate([0, 0, -_ab_z_bot])   b_part();
+else if (render_part == "base") translate([0, 0, -_base_z_bot]) base_part();

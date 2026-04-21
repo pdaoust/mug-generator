@@ -172,35 +172,34 @@ module half_space_z_pos(z_cut) {
 // =====================================================================
 // A/B RAW PART
 // =====================================================================
-// ab_raw() is the A-side half-shell with no registration features.
-// Outer_half (shell_outer_wall_solid minus mug_inner_wall_solid)
-// extends ``wall_thickness`` past the seam planes (Y ≥ −wall_thickness,
-// and below z_min_scaled by wall_thickness when needs_base).  Inner_half
-// (shell_solid_geom minus mug_positive_solid) is flush at Y=0 and
-// z_min_scaled.  Subtracting one from the other leaves a wall of
-// thickness ``wall_thickness`` along the seam planes — an annular wall
-// at the A/B seam (no wall inside the mug cavity, so slip can flow)
-// and, when needs_base, a floor at the Z seam.
+// Each half is an independently-castable half-donut cup: its own floor
+// at the bottom, its own seam wall at Y=0, its own half-shell skin.
+// Outer_half extends wall_thickness past the seam plane (Y ≥ −wt) and
+// (wall_thickness / 2) past the z_min plane (Z ≥ z_min − wt/2), giving
+// the seam wall and the floor their respective thicknesses.  Inner_half
+// is flush at Y=0 and Z=z_min.  Subtraction leaves a wt-thick seam wall
+// and a (wt/2)-thick floor — independent of ``needs_base``, since each
+// half must hold plaster on its own when poured.
+
+_ab_floor_thickness = wall_thickness / 2;
 
 module ab_raw() {
     difference() {
-        // outer_half: shell skin + extended seam/floor
         intersection() {
             difference() {
                 shell_outer_wall_solid();
                 mug_inner_wall_solid();
             }
             half_space_y_pos(-wall_thickness);
-            if (needs_base) half_space_z_pos(z_min_scaled);
+            half_space_z_pos(z_min_scaled - _ab_floor_thickness);
         }
-        // inner_half: plaster cavity, flush at seam / z_min
         intersection() {
             difference() {
                 shell_solid_geom();
                 mug_positive_solid();
             }
             half_space_y_pos(0);
-            if (needs_base) half_space_z_pos(z_min_scaled);
+            half_space_z_pos(z_min_scaled);
         }
     }
 }
@@ -406,18 +405,19 @@ module b_part() {
 // =====================================================================
 // BASE PART (rendered only when needs_base)
 // =====================================================================
-// A/B clips at z = z_min_scaled when needs_base, leaving A/B open at
-// the bottom.  The base is a closed cylindrical cap occupying z <
-// z_min_scaled: outer cylinder of radius base_outer_r, plaster cavity
-// carved inside, a flat top lid (wall_thickness thick) that forms the
-// mug's foot surface.  When the mug has a real foot concavity, a
-// concavity-matching nub is unioned onto the lid so plaster forms
-// around it.  An optional inset maker's mark is carved into the lid
-// from the top down.
+// Open-topped cylindrical cup sitting below A/B at z_min_scaled.  The
+// cup has a wt/2 floor and wall_thickness sides; the plaster cavity
+// extends from the top of the floor up to the cup's open top (no lid).
+// Plaster is poured in separately from above.  The concavity nub and
+// mark stamp rise from the inside of the cup's floor, shaping the
+// plaster's cast-bottom face — which becomes the plaster piece's
+// use-face (the surface that touches the mug's foot) once flipped.
 
-_base_total_h = plaster_thickness + wall_thickness;
+_ab_floor_thickness_ref = wall_thickness / 2;  // mirror of _ab_floor_thickness
+_base_total_h = plaster_thickness + _ab_floor_thickness_ref;
 _base_z_top = z_min_scaled;
 _base_z_bot = _base_z_top - _base_total_h;
+_cavity_floor_z = _base_z_bot + _ab_floor_thickness_ref;
 
 // Emit concavity only when the reported concavity radius is materially
 // smaller than the foot ring's outer radius — otherwise the "concavity"
@@ -433,42 +433,43 @@ module base_outer_cylinder() {
         cylinder(h = _base_total_h, r = base_outer_r);
 }
 
-// Plaster cavity: a disc carved out, leaving wall_thickness of printed
-// material on each of bottom, sides, and top.  Top of cavity is at
-// z_min_scaled - wall_thickness (just under the lid), bottom at
-// z_base_bot + wall_thickness.
+// Plaster cavity: open-topped disc carved from the cup interior,
+// leaving wt/2 on the bottom and wall_thickness on the sides.
 module base_plaster_cavity_disc() {
-    _cav_bot = _base_z_bot + wall_thickness;
-    _cav_top = _base_z_top - wall_thickness;
-    translate([0, 0, _cav_bot])
-        cylinder(h = _cav_top - _cav_bot + epsilon, r = base_inner_r);
+    translate([0, 0, _cavity_floor_z])
+        cylinder(h = _base_z_top - _cavity_floor_z + epsilon,
+                 r = base_inner_r);
 }
 
+// Concavity nub: rises from the cavity floor by the concavity depth.
+// When cast, the plaster forms a matching dimple on its bottom; flipped
+// for use, that dimple becomes a bump that presses into the mug's foot.
 module base_concavity_positive() {
     if (_has_real_concavity) {
         _zc = foot_concavity_z * _cs;
         _rc = foot_concavity_radius * _cs;
-        translate([0, 0, z_min_scaled - epsilon])
-            cylinder(h = _zc - z_min_scaled + epsilon, r = _rc);
+        _nub_h = _zc - z_min_scaled;
+        translate([0, 0, _cavity_floor_z - epsilon])
+            cylinder(h = _nub_h + epsilon, r = _rc);
     }
 }
 
-// Maker's mark — the stamp polygon stays at design-size XY; only depth
-// and Z placement are applied here.  For inset marks (the default),
-// the stamp carves into the lid from z_min_scaled downward by
-// mark_depth, leaving a recess in the printed material.  Plaster
-// pours around it, forming a matching positive that presses a
-// recessed mark into the mug's foot.
+// Maker's mark — stamp polygon at design-size XY, positioned against
+// the cavity floor.  mark_inset=true (default): stamp rises from floor
+// as a positive; plaster forms a dimple around it → flipped, that dimple
+// presses a recessed mark into the mug's foot.  mark_inset=false (relief
+// mark on the mug): stamp is carved into the floor from above; plaster
+// fills the recess as a positive → flipped, that positive embosses a
+// raised mark.  (Relief carving can punch through the thin floor when
+// mark_depth > wt/2; acceptable since this is a single-piece print.)
 module base_mark_stamp() {
     if (mark_enabled && len(mark_points) > 0) {
         if (mark_inset) {
-            translate([0, 0, z_min_scaled - mark_depth])
+            translate([0, 0, _cavity_floor_z - epsilon])
                 linear_extrude(height = mark_depth + epsilon, convexity = 4)
                     polygon(points = mark_points, paths = mark_paths);
         } else {
-            // Relief: add a positive stamp protruding upward from the
-            // lid into the mug cavity so the plaster gets a recess.
-            translate([0, 0, z_min_scaled - epsilon])
+            translate([0, 0, _cavity_floor_z - mark_depth])
                 linear_extrude(height = mark_depth + epsilon, convexity = 4)
                     polygon(points = mark_points, paths = mark_paths);
         }
@@ -480,10 +481,10 @@ module base_raw() {
         union() {
             base_outer_cylinder();
             base_concavity_positive();
-            if (mark_enabled && !mark_inset) base_mark_stamp();
+            if (mark_enabled && mark_inset) base_mark_stamp();
         }
         base_plaster_cavity_disc();
-        if (mark_enabled && mark_inset) base_mark_stamp();
+        if (mark_enabled && !mark_inset) base_mark_stamp();
     }
 }
 
@@ -570,8 +571,7 @@ echo(str("================================"));
 // "base" — base alone (only when needs_base), min Z = 0
 render_part = "all";
 
-// Bottom of A/B (no floor yet; bug #2 will add wt/2 floor below z_min).
-_ab_z_bot = z_min_scaled;
+_ab_z_bot = z_min_scaled - _ab_floor_thickness;
 _render_split_gap = 10;
 
 module render_all() {

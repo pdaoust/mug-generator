@@ -53,12 +53,28 @@ function scaled_closed_profile() =
 // ≈ 31 mm) will warn in preview if a profile is too aggressively
 // curved — that's a drawing problem, not a bug here.
 //
-// Outsetting a closed polygon pushes the axis-closure leg into
-// negative X, which rotate_extrude() refuses.  Clamp to X ≥ 0 on the
-// way out — the clamp only touches the axis leg, which is concealed
-// by the revolution anyway.
+// Outsetting a closed polygon rounds the axis-closure corners outward
+// (into negative X).  Clamping those rounded points to X=0 produces a
+// long run of collinear points on the axis; revolving such a polygon
+// creates zero-area degenerate triangles at the axis that CGAL's Nef
+// union asserts on.  After clamping, drop any point whose neighbours
+// are also at X=0 — this preserves the run's endpoints (the real
+// corners of the axis-return leg) and discards only the axis-interior
+// stacking.
+_axis_eps = 0.001;
+function _is_on_axis(p) = p[0] <= _axis_eps;
 function clamp_to_axis(pts) =
-    [for (p = pts) [max(0, p[0]), p[1]]];
+    let(
+        clamped = [for (p = pts) [max(0, p[0]), p[1]]],
+        n = len(clamped)
+    )
+    [for (i = [0:n-1])
+        let(
+            prev_on = _is_on_axis(clamped[(i - 1 + n) % n]),
+            cur_on  = _is_on_axis(clamped[i]),
+            next_on = _is_on_axis(clamped[(i + 1) % n])
+        )
+        if (!(cur_on && prev_on && next_on)) clamped[i]];
 
 function offset_profile(d) =
     clamp_to_axis(

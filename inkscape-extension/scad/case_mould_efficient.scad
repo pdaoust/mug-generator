@@ -578,7 +578,7 @@ module render_all() {
     translate([0,  _render_split_gap, -_ab_z_bot])   a_part();
     translate([0, -_render_split_gap, -_ab_z_bot])   b_part();
     if (needs_base)
-        translate([0, 0, -_base_z_bot])              base_part();
+        translate([1.5 * base_outer_r, 0, -_base_z_bot]) base_part();
 }
 
 if (render_part == "all")       render_all();

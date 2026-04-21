@@ -124,17 +124,29 @@ module mug_inner_wall_solid() {
     }
 }
 
+// Both shell solids are capped at the top of the filler tube so plaster
+// can be poured in through the filler opening: the mug positive's inner
+// filler tube extends above this cap and carves the pour path through to
+// the mug cavity.
+_shell_top_z = z_lip_scaled + filler_tube_height;
+
 module shell_solid_geom() {
-    union() {
-        revolve(plaster_thickness);
-        handle_sweep(handle_stations_shell_solid);
+    difference() {
+        union() {
+            revolve(plaster_thickness);
+            handle_sweep(handle_stations_shell_solid);
+        }
+        half_space_z_pos(_shell_top_z);
     }
 }
 
 module shell_outer_wall_solid() {
-    union() {
-        revolve(plaster_thickness + wall_thickness);
-        handle_sweep(handle_stations_shell_outer_wall);
+    difference() {
+        union() {
+            revolve(plaster_thickness + wall_thickness);
+            handle_sweep(handle_stations_shell_outer_wall);
+        }
+        half_space_z_pos(_shell_top_z);
     }
 }
 

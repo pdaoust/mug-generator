@@ -368,43 +368,36 @@ module _b_ab_seam_bumps() {
     _seam_key_bump(_f3_pos);
 }
 
-// a_part / b_part are wrapped in render() so OpenSCAD's preview
-// (OpenCSG) caches the result as a single mesh rather than
-// re-compositing the deep boolean tree every frame on camera motion.
 module a_part() {
-    render() {
-        if (_use_keys) {
-            difference() {
-                union() {
-                    a_part_raw();
-                    ab_seam_key_sockets();
-                }
-                if (needs_base) z_seam_key_bumps();
-            }
-        } else {
-            difference() {
+    if (_use_keys) {
+        difference() {
+            union() {
                 a_part_raw();
-                ab_seam_natches();
-                if (needs_base) z_seam_natches();
+                ab_seam_key_sockets();
             }
+            if (needs_base) z_seam_key_bumps();
+        }
+    } else {
+        difference() {
+            a_part_raw();
+            ab_seam_natches();
+            if (needs_base) z_seam_natches();
         }
     }
 }
 
 module b_part() {
-    render() {
-        if (_use_keys) {
-            difference() {
-                b_part_raw();
-                _b_ab_seam_bumps();
-                if (needs_base) z_seam_key_bumps();
-            }
-        } else {
-            difference() {
-                b_part_raw();
-                ab_seam_natches();
-                if (needs_base) z_seam_natches();
-            }
+    if (_use_keys) {
+        difference() {
+            b_part_raw();
+            _b_ab_seam_bumps();
+            if (needs_base) z_seam_key_bumps();
+        }
+    } else {
+        difference() {
+            b_part_raw();
+            ab_seam_natches();
+            if (needs_base) z_seam_natches();
         }
     }
 }
@@ -579,13 +572,13 @@ echo(str("================================"));
 render_part = "all";
 
 _ab_z_bot = z_min_scaled - _ab_floor_thickness;
-_render_split_gap = 20;
+_render_split_gap = 10;
 
 module render_all() {
     translate([0,  _render_split_gap, -_ab_z_bot])   a_part();
     translate([0, -_render_split_gap, -_ab_z_bot])   b_part();
     if (needs_base)
-        translate([-base_outer_r * 2 - _render_split_gap * 2, 0, -_base_z_bot]) base_part();
+        translate([1.5 * base_outer_r, 0, -_base_z_bot]) base_part();
 }
 
 if (render_part == "all")       render_all();

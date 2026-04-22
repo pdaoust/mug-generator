@@ -211,16 +211,6 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     mould_params["z_min_scaled"] = z_min_raw * _cs
     mould_params["z_lip_scaled"] = z_lip_raw * _cs
     mould_params["lip_r_scaled"] = lip_r_raw * _cs
-    if needs_base:
-        scaled_foot_r = foot_r_raw * _cs
-        mould_params["base_outer_r"] = (
-            scaled_foot_r + mould_params["plaster_thickness"]
-            + mould_params["wall_thickness"]
-        )
-        mould_params["base_inner_r"] = (
-            scaled_foot_r + mould_params["plaster_thickness"]
-        )
-
     handle_stations_mould: dict[str, list] = {}
     if handle_enabled:
         handle_stations_out = [
@@ -395,11 +385,9 @@ class TestIntegration:
                     "lip_r_scaled"):
             assert key in text, f"{key} missing from mug_params.scad"
 
-        # Fixture has a concave foot; expect needs_base=true and base_*
-        # keys present.  z_min_scaled should be 10% larger than raw 20mm.
+        # Fixture has a concave foot; expect needs_base=true.
+        # z_min_scaled should be 10% larger than raw 20mm.
         assert "needs_base = true" in text
-        assert "base_outer_r" in text
-        assert "base_inner_r" in text
 
         import re
         m = re.search(r"z_min_scaled\s*=\s*([\d.]+);", text)

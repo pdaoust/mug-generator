@@ -427,17 +427,6 @@ class MugGeneratorEffect(inkex.EffectExtension):
         mould_params["z_min_scaled"] = z_min * _cs
         mould_params["z_lip_scaled"] = z_lip * _cs
         mould_params["lip_r_scaled"] = lip_r * _cs
-        if needs_base:
-            scaled_foot_r = foot_r * _cs
-            mould_params["base_outer_r"] = (
-                scaled_foot_r
-                + self.options.plaster_thickness
-                + self.options.wall_thickness
-            )
-            mould_params["base_inner_r"] = (
-                scaled_foot_r + self.options.plaster_thickness
-            )
-
         # Selective export flags.  Each subsidiary rib is demoted to False
         # when its parent mould is unchecked, since the rib file includes
         # parameters that only exist alongside the mould.

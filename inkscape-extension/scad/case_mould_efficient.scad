@@ -34,18 +34,30 @@ _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 // body_foot_inflection_idx is discarded — it lives in the base part
 // instead.
 
-function scaled_closed_profile() =
+// bottom_extend > 0 sinks the polygon's bottom closure below z_min by
+// that distance.  mug_inner_wall_solid uses this so that after inward
+// offset its revolved floor sits below the A/B clip plane at
+// z_min - wall_thickness/2 — otherwise the inward-offset floor rides
+// up to z_min + wt and a 1.5*wt-thick spurious plaster floor remains
+// in the A/B diff.  Other callers pass 0 and get the original closure.
+function scaled_closed_profile(bottom_extend = 0) =
     let(
         raw = [for (i = [0:body_foot_inflection_idx])
                  [mug_body_profile[i][0] * _cs,
                   mug_body_profile[i][1] * _cs]],
-        // raw runs from (lip_r, z_lip) down to (foot_r, z_min).
-        // Append axis closure: foot→axis, axis vertical, axis→lip.
-        closed = concat(
-            raw,
-            [[0, z_min_scaled],
-             [0, z_lip_scaled]]
-        )
+        z_bot = z_min_scaled - bottom_extend,
+        foot_r = raw[len(raw) - 1][0],
+        // raw runs from (lip_r, z_lip) down to (foot_r, z_min).  Append
+        // axis closure: drop to z_bot along the foot wall, run in along
+        // the bottom, up the axis, and back across the top.
+        closed = bottom_extend > 0
+            ? concat(raw,
+                     [[foot_r, z_bot],
+                      [0,      z_bot],
+                      [0,      z_lip_scaled]])
+            : concat(raw,
+                     [[0, z_min_scaled],
+                      [0, z_lip_scaled]])
     ) closed;
 
 // BOSL2 offset() on a closed polygon handles self-intersection and
@@ -76,16 +88,59 @@ function clamp_to_axis(pts) =
         )
         if (!(cur_on && prev_on && next_on)) clamped[i]];
 
-function offset_profile(d) =
-    clamp_to_axis(
-        d == 0 ? scaled_closed_profile()
-               : offset(scaled_closed_profile(), r = d, closed = true)
-    );
+// After an inward offset (d < 0), the axis-closure leg translates
+// rigidly from x=0 to x≈|d|.  Revolved as-is, that translated leg
+// becomes a spurious r=|d| stub cylinder on the axis.  Snap points
+// that lie on exactly the shifted leg (within _axis_eps) back to x=0.
+// The band must be narrow — a wider snap would pull sloped wall points
+// onto the axis and collapse real geometry.
+function snap_axis_stub(pts, d) =
+    d >= 0 ? pts
+    : let(inset = -d)
+      [for (p = pts)
+          [abs(p[0] - inset) < _axis_eps ? 0 : p[0], p[1]]];
 
-module revolve(d) {
+function offset_profile(d, bottom_extend = 0) =
+    clamp_to_axis(snap_axis_stub(
+        d == 0 ? scaled_closed_profile(bottom_extend)
+               : offset(scaled_closed_profile(bottom_extend),
+                        r = d, closed = true),
+        d));
+
+module revolve(d, bottom_extend = 0) {
     rotate_extrude(angle = 360, convexity = 4)
-        polygon(offset_profile(d));
+        polygon(offset_profile(d, bottom_extend));
 }
+
+// =====================================================================
+// DERIVED SHELL RADII AT Z_MIN
+// =====================================================================
+// The offset polygon's outer boundary at z = z_min is NOT simply
+// foot_r + d: wherever the mug body tapers near the foot (narrows
+// going down), the outward-perpendicular normal there has a downward
+// component, so the offset polygon's right side crosses z_min at a
+// noticeably larger x than an axis-parallel shift would predict.
+// Derive base_outer_r and base_inner_r from the actual offset
+// polygons so the base cylinder matches A/B's outer radius at the
+// z seam by construction.  These overrides shadow the values passed
+// in from mug_params.scad (which uses the naive additive formula).
+
+function _offset_x_at_z(pts, z) =
+    let(n = len(pts),
+        xs = [for (i = [0:n-1])
+                let(a = pts[i], b = pts[(i + 1) % n],
+                    ya = a[1], yb = b[1])
+                if ((ya - z) * (yb - z) <= 0 && abs(ya - yb) > 1e-9)
+                    a[0] + (b[0] - a[0]) * (z - ya) / (yb - ya)])
+    max([for (x = xs) if (x > 0) x]);
+
+// Lazy: evaluated at use time so top-level variable resolution
+// completes first (mug_body_profile, _cs, plaster_thickness etc.).
+function base_outer_r_derived() =
+    _offset_x_at_z(offset_profile(plaster_thickness + wall_thickness),
+                   z_min_scaled);
+function base_inner_r_derived() =
+    _offset_x_at_z(offset_profile(plaster_thickness), z_min_scaled);
 
 // =====================================================================
 // FILLER TUBE
@@ -97,12 +152,14 @@ module revolve(d) {
 // over the mug cavity when the inner-wall solid is differenced out.
 
 module filler_tube_outer() {
+    // Sink the bottom below z_lip by epsilon so it overlaps the revolve
+    // rather than sharing a coincident disc face at z=z_lip — coincident
+    // faces trip CGAL Nef union (applyUnion3D assertion).
     r_bot = lip_r_scaled;
-    r_top = r_bot + filler_tube_height * tan(filler_tube_angle);
-    translate([0, 0, z_lip_scaled])
-        cyl(h = filler_tube_height + epsilon,
-            r1 = r_bot, r2 = r_top,
-            anchor = BOTTOM);
+    h = filler_tube_height + epsilon;
+    r_top = r_bot + h * tan(filler_tube_angle);
+    translate([0, 0, z_lip_scaled - epsilon])
+        cyl(h = h, r1 = r_bot, r2 = r_top, anchor = BOTTOM);
 }
 
 module filler_tube_inner() {
@@ -116,9 +173,23 @@ module filler_tube_inner() {
 // =====================================================================
 // HANDLE SWEEP
 // =====================================================================
+// skin() produces nonplanar quads between adjacent 4-point stations
+// whenever the rectangle shifts and scales independently between
+// stations; CGAL's Nef union then trips an applyUnion3D assertion when
+// the swept solid is unioned with the body revolve.  Chaining pairwise
+// hulls avoids the nonplanar-quad issue — each hull segment is a convex
+// polyhedron CGAL handles directly.
 module handle_sweep(station_array) {
-    if (handle_enabled && len(station_array) > 0)
-        skin(station_array, slices = 0, caps = true);
+    if (handle_enabled && len(station_array) > 1)
+        for (i = [0 : len(station_array) - 2])
+            hull() {
+                polyhedron(
+                    points = station_array[i],
+                    faces  = [[for (k = [0 : len(station_array[i])     - 1]) k]]);
+                polyhedron(
+                    points = station_array[i + 1],
+                    faces  = [[for (k = [0 : len(station_array[i + 1]) - 1]) k]]);
+            }
 }
 
 // =====================================================================
@@ -132,9 +203,17 @@ module mug_positive_solid() {
     }
 }
 
+// The inward-offset profile's horizontal bottom closure rides up to
+// z_min + wt after offsetting, leaving a 1.5*wt-thick spurious plaster
+// floor in the A/B diff (from the clip plane at z_min - wt/2 up to
+// z_min + wt).  Extending the pre-offset bottom by 1.5*wt + epsilon
+// puts the post-offset floor at z_min - wt/2 - epsilon, just below the
+// clip plane, so the A/B diff consumes it entirely.
+_inner_wall_bottom_extend = 1.5 * wall_thickness + epsilon;
+
 module mug_inner_wall_solid() {
     union() {
-        revolve(-wall_thickness);
+        revolve(-wall_thickness, bottom_extend = _inner_wall_bottom_extend);
         filler_tube_inner();
         handle_sweep(handle_stations_body_inner_wall);
     }
@@ -453,7 +532,7 @@ _has_real_concavity = foot_concavity_radius > 0
 
 module base_outer_cylinder() {
     translate([0, 0, _base_z_bot])
-        cylinder(h = _base_total_h, r = base_outer_r);
+        cylinder(h = _base_total_h, r = base_outer_r_derived());
 }
 
 // Plaster cavity: open-topped disc carved from the cup interior,
@@ -461,7 +540,7 @@ module base_outer_cylinder() {
 module base_plaster_cavity_disc() {
     translate([0, 0, _cavity_floor_z])
         cylinder(h = _base_z_top - _cavity_floor_z + epsilon,
-                 r = base_inner_r);
+                 r = base_inner_r_derived());
 }
 
 // Concavity nub: rises from the cavity floor by the concavity depth.
@@ -568,7 +647,7 @@ _v_concavity = _has_real_concavity
           * (foot_concavity_z * _cs - z_min_scaled)
     : 0;
 _v_base_plaster = needs_base
-    ? PI * base_inner_r * base_inner_r * plaster_thickness - _v_concavity
+    ? PI * base_inner_r_derived() * base_inner_r_derived() * plaster_thickness - _v_concavity
     : 0;
 
 _v_total_plaster = 2 * _v_ab_half + _v_base_plaster;
@@ -601,7 +680,7 @@ module render_all() {
     translate([0,  _render_split_gap, -_ab_z_bot])   a_part();
     translate([0, -_render_split_gap, -_ab_z_bot])   b_part();
     if (needs_base)
-        translate([-base_outer_r * 2 - _render_split_gap * 2, 0, -_base_z_bot]) base_part();
+        translate([-base_outer_r_derived() * 2 - _render_split_gap * 2, 0, -_base_z_bot]) base_part();
 }
 
 if (render_part == "all")       render_all();

@@ -114,6 +114,77 @@ def _build_midpoint_curve(
     return midpoints
 
 
+def _rdp_simplify(
+    pts: list[tuple[float, float]], tol: float
+) -> list[tuple[float, float]]:
+    """Ramer-Douglas-Peucker: drop vertices within tol of a chord."""
+    if len(pts) < 3:
+        return list(pts)
+    # Iterative to avoid recursion limits
+    keep = [False] * len(pts)
+    keep[0] = True
+    keep[-1] = True
+    stack = [(0, len(pts) - 1)]
+    while stack:
+        i0, i1 = stack.pop()
+        x0, y0 = pts[i0]
+        x1, y1 = pts[i1]
+        dx, dy = x1 - x0, y1 - y0
+        seg_len = math.hypot(dx, dy)
+        max_d = -1.0
+        max_i = -1
+        for i in range(i0 + 1, i1):
+            px, py = pts[i]
+            if seg_len < 1e-12:
+                d = math.hypot(px - x0, py - y0)
+            else:
+                d = abs(dy * px - dx * py + x1 * y0 - y1 * x0) / seg_len
+            if d > max_d:
+                max_d = d
+                max_i = i
+        if max_d > tol:
+            keep[max_i] = True
+            stack.append((i0, max_i))
+            stack.append((max_i, i1))
+    return [pts[i] for i, k in enumerate(keep) if k]
+
+
+def _build_midpoint_curve_adaptive(
+    inner: list[tuple[float, float]],
+    outer: list[tuple[float, float]],
+    simplify_tol: float = 0.0,
+) -> list[tuple[float, float]]:
+    """Build midpoint curve preserving each rail's adaptive vertex density.
+
+    Takes the union of arc-length fractions at each rail's original
+    vertices.  Dense where the flattener placed many points (tight
+    bends), sparse where it placed few (straight runs).  If simplify_tol
+    > 0, apply Ramer-Douglas-Peucker to collapse near-straight runs.
+    """
+    inner_cl = _cumulative_chord_lengths(inner)
+    outer_cl = _cumulative_chord_lengths(outer)
+    inner_total = inner_cl[-1]
+    outer_total = outer_cl[-1]
+    if inner_total < 1e-12 or outer_total < 1e-12:
+        return []
+
+    fractions = set()
+    fractions.update(c / inner_total for c in inner_cl)
+    fractions.update(c / outer_total for c in outer_cl)
+    sorted_fracs = sorted(fractions)
+
+    midpoints = []
+    for t in sorted_fracs:
+        p_in = _interp_polyline(inner, inner_cl, t * inner_total)
+        p_out = _interp_polyline(outer, outer_cl, t * outer_total)
+        midpoints.append(((p_in[0] + p_out[0]) / 2, (p_in[1] + p_out[1]) / 2))
+
+    if simplify_tol > 0:
+        midpoints = _rdp_simplify(midpoints, simplify_tol)
+
+    return midpoints
+
+
 def sample_rails(
     inner: list[tuple[float, float]],
     outer: list[tuple[float, float]],

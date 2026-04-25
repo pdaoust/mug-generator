@@ -78,11 +78,30 @@ def _emit_profile_array(name: str, profile: list, output_dir: Path, filename: st
 
 @emitter("mug_body_profile")
 def _emit_mug_body_profile(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit mug_body_profile.scad — single closed cross-section."""
-    _emit_profile_array(
-        "mug_body_profile", data["mug_body_profile"],
-        output_dir, "mug_body_profile.scad",
-    )
+    """Emit mug_body_profile.scad.
+
+    Writes the primary closed cross-section plus — when present — a
+    coarser ``mug_body_profile_shell`` variant consumed by
+    case_mould_efficient.scad's shell revolve.
+    """
+    pts = data["mug_body_profile"]
+    pts = pts[:-1] if _is_closed(pts) else pts
+    lines = [HEADER, "mug_body_profile = [\n"]
+    for i, pt in enumerate(pts):
+        comma = "," if i < len(pts) - 1 else ""
+        lines.append(f"  {_format_point_2d(pt)}{comma}\n")
+    lines.append("];\n")
+
+    shell = data.get("mug_body_profile_shell")
+    if shell:
+        shell = shell[:-1] if _is_closed(shell) else shell
+        lines.append("\nmug_body_profile_shell = [\n")
+        for i, pt in enumerate(shell):
+            comma = "," if i < len(shell) - 1 else ""
+            lines.append(f"  {_format_point_2d(pt)}{comma}\n")
+        lines.append("];\n")
+
+    (output_dir / "mug_body_profile.scad").write_text("".join(lines))
 
 
 @emitter(
@@ -124,8 +143,6 @@ def _emit_handle_stations_mould(data: dict[str, Any], output_dir: Path) -> None:
     names = (
         "handle_stations_body_positive",
         "handle_stations_body_inner_wall",
-        "handle_stations_shell_solid",
-        "handle_stations_shell_outer_wall",
     )
     lines = [HEADER]
     for name in names:
@@ -141,6 +158,18 @@ def _emit_handle_stations_mould(data: dict[str, Any], output_dir: Path) -> None:
                 lines.append(f"    {_format_point_3d(pt)}{comma}\n")
             comma = "," if si < len(stations) - 1 else ""
             lines.append(f"  ]{comma}\n")
+        lines.append("];\n")
+
+    # 2D midline path (mug-frame XZ) consumed by path_sweep2d for the
+    # two circular-tube shell variants.
+    midline = data.get("handle_midline_xz", []) or []
+    if not midline:
+        lines.append("\nhandle_midline_xz = [];\n")
+    else:
+        lines.append("\nhandle_midline_xz = [\n")
+        for i, pt in enumerate(midline):
+            comma = "," if i < len(midline) - 1 else ""
+            lines.append(f"  {_format_point_2d(pt)}{comma}\n")
         lines.append("];\n")
 
     (output_dir / "handle_stations_mould.scad").write_text("".join(lines))
@@ -253,7 +282,15 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
             lines.append(
                 f"body_foot_inflection_idx = {params['body_foot_inflection_idx']};\n"
             )
-        for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled"):
+        if "body_foot_inflection_idx_shell" in params:
+            lines.append(
+                "body_foot_inflection_idx_shell = "
+                f"{params['body_foot_inflection_idx_shell']};\n"
+            )
+        for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled",
+                    "v_handle_shell_body_overlap",
+                    "handle_shell_r", "handle_shell_outer_r",
+                    "v_handle_shell_tube"):
             if key in params:
                 lines.append(f"{key} = {params[key]:.6f};\n")
 

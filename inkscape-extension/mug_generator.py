@@ -233,8 +233,15 @@ class MugGeneratorEffect(inkex.EffectExtension):
             def mug_true_radius_at_z(z):
                 return mug_surface.radius_at_z(z)
 
-            from lib.rail_sampler import _cumulative_chord_lengths, _build_midpoint_curve
+            from lib.rail_sampler import (
+                _cumulative_chord_lengths,
+                _build_midpoint_curve,
+                _build_midpoint_curve_adaptive,
+            )
             midpoints = _build_midpoint_curve(inner_rail_mm, outer_rail_mm)
+            midpoints_adaptive = _build_midpoint_curve_adaptive(
+                inner_rail_mm, outer_rail_mm
+            )
             mid_cl = _cumulative_chord_lengths(midpoints)
             mid_total = mid_cl[-1]
 
@@ -303,6 +310,14 @@ class MugGeneratorEffect(inkex.EffectExtension):
         # Data is emitted at actual (fired) size; clay shrinkage scaling
         # is applied in the mould/funnel SCAD files.
         scad_body_profile = [[p[0], p[1]] for p in body_profile]
+
+        # Coarse body profile for case_mould_efficient shell revolve.
+        # Shell surfaces are hidden inside plaster, so subdividing beziers
+        # at fa=30 (vs body-positive's ~7°) cuts polygon count substantially.
+        shell_body_paths = get_layer_paths(svg, "mug body", fa_deg=30.0, fs=None)
+        shell_body_mm = svg_to_mm(shell_body_paths[0])
+        shell_body_profile, shell_foot_idx = split_body_profile(shell_body_mm)
+        scad_body_profile_shell = [[p[0], p[1]] for p in shell_body_profile]
         handle_stations_mould: dict[str, list] = {}
         if handle_enabled:
             handle_stations_out = [
@@ -322,31 +337,112 @@ class MugGeneratorEffect(inkex.EffectExtension):
                 for s in stations
             ]
 
-            # Four offset station variants consumed by case_mould_efficient.scad
+            # Four offset station variants consumed by case_mould_efficient.scad.
+            # case_mould_efficient.scad consumes these *without* applying the
+            # _cs greenware scale, so we scale the handle here to greenware
+            # size.  Mould offsets (wall_thickness, plaster_thickness) must
+            # stay unscaled, so we apply them in fired coordinates as d/cs,
+            # then scale the resulting polygons by cs — the offset lands on
+            # the scaled body at exactly the drawn unscaled amount.
+            cs = 1.0 if shrinkage_pct <= 0 else 100.0 / (100.0 - shrinkage_pct)
             wt = self.options.wall_thickness
             pt = self.options.plaster_thickness
+
+            # Shell variants live inside plaster and are invisible on the
+            # final print, so subdivide their bezier inputs at fa=30 (vs
+            # the body-positive's ~7°) to cut polygon count sharply.  This
+            # produces a coarser handle profile and fewer stations along
+            # the sweep path.
+            shell_fa = 30.0
+            shell_profile_paths = get_layer_paths(
+                svg, "handle profile", fa_deg=shell_fa, fs=None,
+            )
+            shell_handle_profile = [(p[0], p[1]) for p in shell_profile_paths[0]]
+            n_stations_shell = compute_n(0, shell_fa, 0, mid_total)
+            shell_stations_base = sample_rails(
+                inner_rail_mm, outer_rail_mm, n_stations_shell,
+            )
+            shell_stations_base = apply_side_rails(
+                shell_stations_base, side_rail, side_rail,
+            )
+
+            # body_positive / body_inner_wall are consumed by skin() and
+            # must track the drawn per-station cross-section.  The two
+            # shell variants are synthesized in SCAD as a fat circular
+            # tube via path_sweep2d (see handle_midline_xz / handle_shell_r
+            # below), so we no longer emit their station polygons — we
+            # do compute shell_solid internally for the body-overlap
+            # volume correction.
             variant_offsets = [
                 ("handle_stations_body_positive", 0.0, False),
-                ("handle_stations_body_inner_wall", -wt, True),
-                ("handle_stations_shell_solid", pt, False),
-                ("handle_stations_shell_outer_wall", pt + wt, False),
+                ("handle_stations_body_inner_wall", -wt, False),
+                ("handle_stations_shell_solid", pt, True),
             ]
-            for name, d, extend_ends in variant_offsets:
-                variant_stations = offset_stations(stations, d)
-                if extend_ends:
-                    variant_stations = extend_station_endpoints(variant_stations, wt)
+            for name, d, coarse in variant_offsets:
+                src_stations = shell_stations_base if coarse else stations
+                src_profile = shell_handle_profile if coarse else handle_profile
+                variant_stations = offset_stations(src_stations, d / cs)
                 polys = generate_handle_stations(
-                    handle_profile, variant_stations,
+                    src_profile, variant_stations,
                     mug_axis_x=mug_surface.axis_x,
                     mug_radius_at_z=mug_true_radius_at_z,
                 )
+                polys = [[list(p) for p in poly] for poly in polys]
+                polys = nudge_handle_stations(
+                    polys, scad_outer_profile,
+                    axis_x=mug_surface.axis_x,
+                    station_frames=variant_stations,
+                    norm_profile=normalize_profile(src_profile),
+                )
                 handle_stations_mould[name] = [
-                    [[pt[0], pt[1], pt[2]] for pt in poly]
+                    [[p[0] * cs, p[1] * cs, p[2] * cs] for p in poly]
                     for poly in polys
                 ]
+
+            # Path-sweep data for the two shell variants.  The midline
+            # is a 2D XZ curve (Y=0 drawing plane) reused as the
+            # path_sweep2d path; the tube radius is the max distance
+            # from each body_positive station's centroid to any of its
+            # points, across all stations (already in greenware coords),
+            # plus plaster_thickness (and +wall_thickness for the outer
+            # variant).  Overestimating near slimmer parts of the
+            # handle is fine — the tube is hidden inside plaster.
+            import math as _m
+            handle_midline_xz = [[p[0] * cs, p[1] * cs] for p in midpoints_adaptive]
+            _hpos = handle_stations_mould["handle_stations_body_positive"]
+            _r_max = 0.0
+            for poly in _hpos:
+                n = len(poly)
+                if n == 0:
+                    continue
+                cx = sum(p[0] for p in poly) / n
+                cy = sum(p[1] for p in poly) / n
+                cz = sum(p[2] for p in poly) / n
+                for p in poly:
+                    d = _m.sqrt((p[0] - cx) ** 2
+                                + (p[1] - cy) ** 2
+                                + (p[2] - cz) ** 2)
+                    if d > _r_max:
+                        _r_max = d
+            handle_shell_r = _r_max + pt
+            handle_shell_outer_r = _r_max + pt + wt
+
+            # Tube volume for the SCAD plaster estimate: π·r²·L along
+            # the midline.  Subtracts nothing for the body-positive
+            # cavity — SCAD still subtracts _v_handle_pos from this.
+            _L_mid = 0.0
+            for i in range(len(handle_midline_xz) - 1):
+                ax, az = handle_midline_xz[i]
+                bx, bz = handle_midline_xz[i + 1]
+                _L_mid += _m.hypot(bx - ax, bz - az)
+            v_handle_shell_tube = _m.pi * handle_shell_r ** 2 * _L_mid
         else:
             handle_stations_out = []
             handle_path_out = []
+            handle_midline_xz = []
+            handle_shell_r = 0.0
+            handle_shell_outer_r = 0.0
+            v_handle_shell_tube = 0.0
 
         # Extract maker's mark (optional layer)
         mm_per_svg = to_mm(scale, doc_units)
@@ -420,6 +516,36 @@ class MugGeneratorEffect(inkex.EffectExtension):
             key=lambda i: (-outer_pts[i][1], outer_pts[i][0]),
         )
         mould_params["body_foot_inflection_idx"] = foot_inflection_idx
+        shell_outer_pts = scad_body_profile_shell[:shell_foot_idx + 1]
+        shell_foot_inflection_idx = max(
+            range(len(shell_outer_pts)),
+            key=lambda i: (-shell_outer_pts[i][1], shell_outer_pts[i][0]),
+        )
+        mould_params["body_foot_inflection_idx_shell"] = shell_foot_inflection_idx
+        # Overlap of handle plaster shell with body plaster shell — both
+        # are outset by plaster_thickness and intersect heavily near the
+        # handle attachment.  The SCAD volume estimate sums the two and
+        # subtracts non-outset handle (to cancel the mug-interior part),
+        # but nothing cancels the shared plaster band.  Compute the
+        # correction here; scad_writer emits it as a constant.
+        if handle_enabled and "handle_stations_shell_solid" in handle_stations_mould:
+            from lib.handle_shell_overlap import handle_shell_body_overlap_volume
+            # handle_stations_mould polygons are in greenware (cs-scaled)
+            # coords; wrap the fired-size radius function to match so the
+            # overlap volume is consistent with the SCAD-rendered geometry.
+            cs = 1.0 if shrinkage_pct <= 0 else 100.0 / (100.0 - shrinkage_pct)
+            def _scaled_radius(z, cs=cs, fn=mug_true_radius_at_z):
+                r = fn(z / cs)
+                return None if r is None else r * cs
+            mould_params["v_handle_shell_body_overlap"] = (
+                handle_shell_body_overlap_volume(
+                    handle_stations_mould["handle_stations_shell_solid"],
+                    _scaled_radius,
+                    self.options.plaster_thickness,
+                )
+            )
+        else:
+            mould_params["v_handle_shell_body_overlap"] = 0.0
         needs_base = bool(concavity) or bool(
             mark_enabled and self.options.mark_inset
         )
@@ -427,6 +553,9 @@ class MugGeneratorEffect(inkex.EffectExtension):
         mould_params["z_min_scaled"] = z_min * _cs
         mould_params["z_lip_scaled"] = z_lip * _cs
         mould_params["lip_r_scaled"] = lip_r * _cs
+        mould_params["handle_shell_r"] = handle_shell_r
+        mould_params["handle_shell_outer_r"] = handle_shell_outer_r
+        mould_params["v_handle_shell_tube"] = v_handle_shell_tube
         # Selective export flags.  Each subsidiary rib is demoted to False
         # when its parent mould is unchecked, since the rib file includes
         # parameters that only exist alongside the mould.
@@ -446,8 +575,10 @@ class MugGeneratorEffect(inkex.EffectExtension):
         data = {
             "exports": exports,
             "mug_body_profile": scad_body_profile,
+            "mug_body_profile_shell": scad_body_profile_shell,
             "handle_stations": handle_stations_out,
             "handle_stations_mould": handle_stations_mould,
+            "handle_midline_xz": handle_midline_xz,
             "handle_path": handle_path_out,
             "mark_polygons": mark_polygons if mark_enabled else None,
             "mug_params": {

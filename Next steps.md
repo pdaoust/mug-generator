@@ -10,6 +10,10 @@
     * unreleasable forms in body or handle
     * handle rails that don't touch the body
     * body that doesn't touch x = 0
+* [ ] why are we simplifying the beziers in Python? Can we not just export the paths directly to BOSL?
+* [ ] DRY up the codebase
+    * I had a note earlier about clay shrinkage; not sure what that's about
+    * functions like mark stamp are duplicated across all the files that use them?
 
 ## Done
 

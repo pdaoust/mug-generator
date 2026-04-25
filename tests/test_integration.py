@@ -236,8 +236,6 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         variant_offsets = [
             ("handle_stations_body_positive", 0.0, False),
             ("handle_stations_body_inner_wall", -wt, True),
-            ("handle_stations_shell_solid", pt_plaster, False),
-            ("handle_stations_shell_outer_wall", pt_plaster + wt, False),
         ]
         for name, d, extend_ends in variant_offsets:
             variant_stations = _offset_stations(stations, d)
@@ -252,9 +250,11 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
                 [[pt[0], pt[1], pt[2]] for pt in poly]
                 for poly in polys
             ]
+        handle_midline_xz = [[p[0], p[1]] for p in midpoints]
     else:
         handle_stations_out = []
         handle_path_out = []
+        handle_midline_xz = []
 
     exports_resolved = dict(DEFAULT_EXPORTS)
     if exports is not None:
@@ -271,6 +271,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "mark_polygons": mark_polygons if mark_enabled else None,
         "handle_stations": handle_stations_out,
         "handle_stations_mould": handle_stations_mould,
+        "handle_midline_xz": handle_midline_xz,
         "handle_path": handle_path_out,
         "mug_params": {
             "fn": fn,
@@ -395,47 +396,43 @@ class TestIntegration:
         # raw z_min is 20mm; scaled by 100/(100-10) = 1.111...
         assert abs(float(m.group(1)) - 20.0 * 100.0 / 90.0) < 1e-3
 
-    def test_handle_stations_mould_four_variants(self, tmp_path):
-        """handle_stations_mould.scad has four arrays with the expected
-        relative extents and endpoint counts."""
+    def test_handle_stations_mould_variants_and_midline(self, tmp_path):
+        """handle_stations_mould.scad emits the two skin()-consumed
+        station arrays (body positive + body inner wall) plus the 2D
+        handle midline consumed by path_sweep2d for the shell tubes."""
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         text = (tmp_path / "handle_stations_mould.scad").read_text()
         names = (
             "handle_stations_body_positive",
             "handle_stations_body_inner_wall",
-            "handle_stations_shell_solid",
-            "handle_stations_shell_outer_wall",
         )
         arrays = {n: _parse_scad_array(text, n) for n in names}
 
-        # Endpoint count: body_inner_wall has two extra stations; the
-        # other three share the same count.
+        # inner_wall has two extra extended endpoints.
         base_n = len(arrays["handle_stations_body_positive"])
         assert base_n > 2
         assert len(arrays["handle_stations_body_inner_wall"]) == base_n + 2
-        assert len(arrays["handle_stations_shell_solid"]) == base_n
-        assert len(arrays["handle_stations_shell_outer_wall"]) == base_n
 
-        # sx/sz monotonicity at matching stations: outer_wall > solid >
-        # body_positive > inner_wall.  Measure by XY-plane diameter of
-        # the station polygon.
+        # Monotonicity: inner_wall shrinks inside body_positive.
         def _bbox_diag(poly):
             xs = [p[0] for p in poly]
             ys = [p[1] for p in poly]
             zs = [p[2] for p in poly]
             return (max(xs) - min(xs)) + (max(ys) - min(ys)) + (max(zs) - min(zs))
 
-        # Compare interior stations (skip endpoints so inner_wall's
-        # extra stations don't confuse the alignment).
         for i in range(1, base_n - 1):
             bp = _bbox_diag(arrays["handle_stations_body_positive"][i])
             iw = _bbox_diag(arrays["handle_stations_body_inner_wall"][i + 1])
-            ss = _bbox_diag(arrays["handle_stations_shell_solid"][i])
-            sow = _bbox_diag(arrays["handle_stations_shell_outer_wall"][i])
-            assert iw < bp < ss < sow, (
-                f"Station {i} extents not monotonic: "
-                f"iw={iw:.3f} bp={bp:.3f} ss={ss:.3f} sow={sow:.3f}"
+            assert iw < bp, (
+                f"Station {i}: inner_wall ({iw:.3f}) should be smaller "
+                f"than body_positive ({bp:.3f})"
             )
+
+        # The midline is emitted and has multiple points.
+        midline = _parse_scad_array(text, "handle_midline_xz")
+        assert len(midline) > 5
+        for pt in midline:
+            assert len(pt) == 2
 
     def test_jiggering_params_in_mug_params(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)

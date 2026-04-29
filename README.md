@@ -21,7 +21,7 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 6. Select the package you downloaded.
 
 > [!INFO]
-> Only the jiggering ribs need OpenSCAD nightly; if you're using them, you'll need to turn on the experimental 'roof' feature. If you're not going to use jiggering ribs, you can use the stable OpenSCAD 2021.01 instead.
+> Only the ribs need OpenSCAD nightly; if you're using them, you'll need to turn on the experimental 'roof' feature. If you're not going to use ribs, you can use the stable OpenSCAD 2021.01 instead. If you're trying to render the models in OpenSCAD and keep getting 'CGAL errors', try OpenSCAD nightly anyway -- it uses a new renderer called Manifold that works better than CGAL for some of the complex swoopy shapes we're creating. (If you want to know more, it has something to with nearly coplanar triangles.)
 
 ## Designing your mug
 
@@ -44,7 +44,7 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 6. In the `mark` layer, create a maker's mark. This'll be embossed into the foot of your mug. If you use text, remember to convert it into a path!
 
 > [!NOTE]
-> It might not be immediately obvious how the 'rails' work. If you imagine your handle's cross section as an oval (most handles are), the four rails define a 3D guide of varying size and angle that your cross-section gets extruded into. It's like being able to change the size of your extruder nozzle as you go along, or the way a hand-pulled handle narrows in the middle and flares at the ends. The shape in the `handle profile` layer is oriented so that the bottom edge matches the outside rail in the `handle rails` layer, and the top edge matches the inside rail.
+> If you imagine your handle's cross section as an oval (most handles are), the four rails define a 3D guide of varying size and angle that your cross-section gets extruded into. It's like being able to change the size of your extruder nozzle as you go along, or the way a hand-pulled handle narrows in the middle and flares at the ends. The shape in the `handle profile` layer is oriented so that the bottom edge matches the outside rail in the `handle rails` layer, and the top edge matches the inside rail.
 
 ## Generating and printing the files
 
@@ -53,21 +53,27 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 3. Click 'Apply'.
 4. Open up your output folder, then open one of the following OpenSCAD files:
     * **`prototype.scad`**: The positive model of the mug for printing a prototype.
-    * **`case_mould.scad`**: Forms for a two- or three-part case mould, ready for pouring plaster into once you fit Tony Hansen's [natch embeds and retaining clips](https://digitalfire.com/picture/3716) into the holes.
-    * **`funnel.scad`**: The pouring funnel with retaining clip.
+    * **`case_mould_original.scad`**: Forms for a two- or three-part case mould, ready for pouring plaster into once you fit Tony Hansen's [natch embeds and retaining clips](https://digitalfire.com/picture/3716) into the holes. This creates 'bucket'-style mould parts which use a fair bit of plaster and are hard to peel away from the mould.
+    * **`case_mould_efficient.scad`**: These are also forms for a two- or three-part case mould, but use less plaster and are (hopefully) easier to peel off the plaster without breaking. Note that their draft angle doesn't allow you to peel off right away; you have to cut the corners with a rotary tool, cutoff wheel, or belt sander first.
+    * **`funnel.scad`**: The pouring funnel.
+    * **`hump_mould.scad`** and **`hump_mould_rib.scad`**: A mother mould for pouring a plaster hump mould in the shape of your piece's interior, and a rib for shaping the exterior. Depending on the shape of your piece, you can create a rib that profiles the foot ring (top approach) or the lip (side approach), but not both. Note that this is only relevant to bodies that have a hump-mould-friendly shape -- you have to be able to pop the clay off the mould!
+    * **`slump_mould.scad`** and **`slump_mould_rib.scad`**: Like the hump mould and its rib, but opposite. Creates a mother mould for a plaster slump mould, and a rib to shape the interior. The rib lets you approach from the top and shape the lip profile.
 
-    All other files in the folder contain data for the above three files.
+    All other files in the folder contain data and shared libraries for the above three files. You can open up `mug_settings.scad` and twiddle some of the settings you originally specified in the Inkscape extension dialogue.
 5. Press <kbd>F6</kbd> to render in good quality.
 6. Press <kbd>F7</kbd> to save an STL file.
 7. Open the STL in your favourite slicer and print! Recommended settings:
     * **Wall thickness**: 0.8mm (two nozzles wide).
-    * **Bottom thickness** (case mould forms): one or two layers only -- just enough for it to adhere and hold together. Later on you'll want to punch through the bottom in order to remove the form from the plaster.
-    * **Top thickness** (case mould forms): 0.8mm minus however thick you set the bottom to.
+    * **Bottom thickness** (original case mould forms): one or two layers only -- just enough for it to adhere and hold together. Later on you'll want to punch through the bottom in order to remove the form from the plaster.
+    * **Top thickness** (original case mould forms): 0.4mm -- otherwise it's too strong and thick to heat-gun and peel off.
     * **Layer height**: as fine as you can get it, unless you plan to post-process with sandpaper or some sort of varnish. **Note**: Make sure your layer height setting in the dialog matches this.
     * **Infill**: lightning -- there will be a lot of interior in these forms and it's not worth it to print a strong infill.
     * **Ironing**: yeah, probably.
-    * **Support**: none, all parts are designed to be printed without support.
-    * **Bed adhesion**: whatever you need to make it stick. If you have a thin rim-style foot, the prototype will probably need to be anchored down well. The funnel also. But the case moulds should need no brim except at the corners.
+    * **Support**:
+        * **Case mould (original)**, **funnel**, **hump/slump moulds**, and **ribs**: none, all parts are designed to be printed without support.
+        * **Case mould (plaster-efficient)**: Rotate the A/B models 45° so the A/B seam is facing down toward the print bed, then add tree supports touching build plate.
+        * **Prototype**: you'll need support if you've got a concave foot, and some support for the handle too.
+    * **Bed adhesion**: whatever you need to make it stick. If you have a thin rim-style foot, the prototype will probably need to be anchored down well. The funnel also. But the case moulds, slump/hump moulds, and ribsgo should need no brim except at the corners.
 8. Print [natch embeds and retaining clips](https://digitalfire.com/picture/3716) -- for a three-part mould, you need three sets for the top A and B pieces and two sets for the bottom piece, and for a two-part mould, you only need two sets for the A and B pieces. If you pour the moulds one at a time, you only need to print three clips maximum because you can reuse them.
 9. Assemble the natch embeds and retaining clips in the form wall holes, and fill with plaster.
 10. Let the plaster dry.

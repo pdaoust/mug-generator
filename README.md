@@ -52,7 +52,7 @@ I owe a huge amount of gratitude to the hard work of [Tony Hansen](https://digit
 2. Twiddle the settings to your heart's content and choose an output folder.
 3. Click 'Apply'.
 4. Open up your output folder, then open one of the following OpenSCAD files:
-    * **`mug.scad`**: The positive model of the mug for printing a prototype.
+    * **`prototype.scad`**: The positive model of the mug for printing a prototype.
     * **`case_mould.scad`**: Forms for a two- or three-part case mould, ready for pouring plaster into once you fit Tony Hansen's [natch embeds and retaining clips](https://digitalfire.com/picture/3716) into the holes.
     * **`funnel.scad`**: The pouring funnel with retaining clip.
 

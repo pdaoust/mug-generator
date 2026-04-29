@@ -204,7 +204,7 @@ class TestIntegration:
         assert (tmp_path / "mug_body_profile.scad").exists()
         assert (tmp_path / "handle_bezpaths.scad").exists()
         assert (tmp_path / "mug_params.scad").exists()
-        assert (tmp_path / "mug.scad").exists()
+        assert (tmp_path / "prototype.scad").exists()
         assert (tmp_path / "funnel.scad").exists()
 
     def test_body_bezpath_valid(self, tmp_path):
@@ -318,7 +318,7 @@ class TestIntegration:
         assert (tmp_path / "mug_body_profile.scad").exists()
         assert (tmp_path / "handle_bezpaths.scad").exists()
         assert (tmp_path / "mug_params.scad").exists()
-        assert (tmp_path / "mug.scad").exists()
+        assert (tmp_path / "prototype.scad").exists()
 
         assert data["handle_inner_rail_bez"] is None
 
@@ -335,7 +335,7 @@ class TestIntegration:
 
     def test_handle_snap_to_mug_in_scad(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
-        mug_text = (tmp_path / "mug.scad").read_text()
+        mug_text = (tmp_path / "prototype.scad").read_text()
         assert "snap_to_mug" in mug_text
         mould_text = (tmp_path / "case_mould_original.scad").read_text()
         assert "snap_to_mug" in mould_text
@@ -351,7 +351,7 @@ class TestSelectiveExport:
         assert (tmp_path / "mug_params.scad").exists()
         assert (tmp_path / "mug_body_profile.scad").exists()
 
-        for name in ("mug.scad", "case_mould_original.scad",
+        for name in ("prototype.scad", "case_mould_original.scad",
                      "case_mould_efficient.scad", "slump_mould.scad",
                      "hump_mould.scad", "slump_mould_jiggering_rib.scad",
                      "hump_mould_jiggering_rib.scad"):
@@ -424,7 +424,7 @@ class TestSelectiveExport:
         ex["prototype"] = True
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
 
-        assert (tmp_path / "mug.scad").exists()
+        assert (tmp_path / "prototype.scad").exists()
         assert (tmp_path / "handle_bezpaths.scad").exists()
         assert (tmp_path / "mark_polygon.scad").exists()
         assert not (tmp_path / "funnel.scad").exists()

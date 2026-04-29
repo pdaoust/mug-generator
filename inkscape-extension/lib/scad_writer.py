@@ -29,7 +29,7 @@ def emitter(name: str, needs: Callable[[dict[str, bool]], bool] | None = None):
 # Map from static .scad filename → export flag that enables it.
 # Files not in this map are always copied (shared helpers).
 EXPORT_TO_SCAD: dict[str, str] = {
-    "mug.scad": "prototype",
+    "prototype.scad": "prototype",
     "case_mould_original.scad": "case_mould",
     "case_mould_efficient.scad": "case_mould_efficient",
     "funnel.scad": "funnel",

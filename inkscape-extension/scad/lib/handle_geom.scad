@@ -2,7 +2,7 @@
 //
 // Functions in this file consume cubic-Bezier paths (bezpaths) emitted
 // directly from the Inkscape extension and produce the polylines and
-// stations needed by mug.scad / case_mould_efficient.scad.
+// stations needed by prototype.scad / case_mould_efficient.scad.
 //
 // All bezpaths are degree-3 (cubic): a flat list of [x,y] points laid
 // out as [knot0, ctrl0a, ctrl0b, knot1, ctrl1a, ctrl1b, knot2, ...].
@@ -230,9 +230,9 @@ function bezpath_max_axis(bez, axis) =
 // against y=z); we return the maximum, which corresponds to the outer
 // surface for axially-symmetric mug bodies.
 //
-// Replaces the polyline-walk mug_r_at_z that lived in mug.scad —
+// Replaces the polyline-walk mug_r_at_z that lived in prototype.scad —
 // resolution-independent and aware of mid-curve sweeps.  Named
-// mug_r_at_z_bez to keep mug.scad's single-arg wrapper unambiguous.
+// mug_r_at_z_bez to keep prototype.scad's single-arg wrapper unambiguous.
 function mug_r_at_z_bez(bez, z) =
     let(
         ns = _n_segs(bez),
@@ -252,7 +252,7 @@ function mug_r_at_z_bez(bez, z) =
 // Foot inflection on the *outer half* bezpath: the on-curve point with
 // minimum z (analytic — searches segment-derivative roots, not just
 // knots).  Returns [r, z].  Only meaningful on a bezpath that has
-// already been split at the rim (mug.scad, case_mould_*.scad use the
+// already been split at the rim (prototype.scad, case_mould_*.scad use the
 // closed body and call mug_foot_idx instead).
 function foot_inflection(outer_bez) = bezpath_min_axis(outer_bez, 1);
 

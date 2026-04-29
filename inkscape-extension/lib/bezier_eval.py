@@ -205,7 +205,7 @@ def bezpath_radius_at_z(bezpath, z, axis_z=1, axis_r=0, side="max"):
 
     Returns the maximum (``side="max"``) or minimum (``side="min"``)
     radius across all crossings on all segments, or ``None`` if no
-    crossings exist.  This is the analytic cousin of mug.scad's
+    crossings exist.  This is the analytic cousin of prototype.scad's
     polyline-walk ``mug_r_at_z``.
     """
     rs = []

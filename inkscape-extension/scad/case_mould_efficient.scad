@@ -48,7 +48,7 @@ _foot_inflection_idx_shell = mug_foot_inflection_idx(
 // in SCAD as a fat circular tube via path_sweep2d along the emitted
 // handle midline, bypassing the hull-chain / skin bottleneck.
 // Phase 5: compute body station variants from raw bezpaths at SCAD
-// render time.  Same chain as mug.scad: sample rails → side rails →
+// render time.  Same chain as prototype.scad: sample rails → side rails →
 // (optional offset for inner-wall) → generate stations w/ cylinder
 // blend → hypar nudge.  All in fired coordinates, then scaled by _cs
 // at the end so downstream snap_to_mug / skin / overlap consume
@@ -947,7 +947,7 @@ module base_concavity_positive() {
 // stamp releases from the plaster dimple; relief (embossed on the mug)
 // tapers outward going up so the plaster positive releases the case
 // mould.  Matches the mark_stamp implementation in case_mould_original
-// and mug.scad.
+// and prototype.scad.
 _mark_depth_scaled = mark_depth * _cs;
 _mark_data = mark_tessellate(mark_bezpaths, mark_fa, mark_fs, _cs);
 _mark_pts = _mark_data[0];

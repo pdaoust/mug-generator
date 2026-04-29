@@ -343,9 +343,9 @@ def main() -> None:
     files_to_profile: list[tuple[str, Path, list[str]]] = []
 
     if args.file in ("mug", "both"):
-        path = find_scad_file(scad_dir, "mug.scad")
+        path = find_scad_file(scad_dir, "prototype.scad")
         mods = MUG_MODULES if args.modules == "all" else args.modules.split(",")
-        files_to_profile.append(("mug.scad", path, mods))
+        files_to_profile.append(("prototype.scad", path, mods))
 
     if args.file in ("mould", "both"):
         path = find_scad_file(scad_dir, "case_mould_original.scad")

@@ -248,8 +248,8 @@ class TestIntegration:
     def test_new_scad_files_copied(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         for name in ("hump_mould.scad", "slump_mould.scad",
-                      "hump_mould_jiggering_rib.scad",
-                      "slump_mould_jiggering_rib.scad"):
+                      "hump_mould_rib.scad",
+                      "slump_mould_rib.scad"):
             assert (tmp_path / name).exists()
 
     def test_efficient_mould_derived_params(self, tmp_path):
@@ -266,7 +266,7 @@ class TestIntegration:
         assert m
         assert abs(float(m.group(1)) - 20.0 * 100.0 / 90.0) < 1e-3
 
-    def test_jiggering_params_in_mug_params(self, tmp_path):
+    def test_rib_params_in_mug_params(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20)
         text = (tmp_path / "mug_params.scad").read_text()
         assert "rib_thickness" in text
@@ -353,8 +353,8 @@ class TestSelectiveExport:
 
         for name in ("prototype.scad", "case_mould_original.scad",
                      "case_mould_efficient.scad", "slump_mould.scad",
-                     "hump_mould.scad", "slump_mould_jiggering_rib.scad",
-                     "hump_mould_jiggering_rib.scad"):
+                     "hump_mould.scad", "slump_mould_rib.scad",
+                     "hump_mould_rib.scad"):
             assert not (tmp_path / name).exists()
 
         assert not (tmp_path / "handle_bezpaths.scad").exists()
@@ -366,15 +366,15 @@ class TestSelectiveExport:
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
 
         assert not (tmp_path / "slump_mould.scad").exists()
-        assert not (tmp_path / "slump_mould_jiggering_rib.scad").exists()
+        assert not (tmp_path / "slump_mould_rib.scad").exists()
 
     def test_ribs_are_independent(self, tmp_path):
         ex = dict(DEFAULT_EXPORTS)
         ex["slump_rib"] = False
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, exports=ex)
 
-        assert (tmp_path / "hump_mould_jiggering_rib.scad").exists()
-        assert not (tmp_path / "slump_mould_jiggering_rib.scad").exists()
+        assert (tmp_path / "hump_mould_rib.scad").exists()
+        assert not (tmp_path / "slump_mould_rib.scad").exists()
 
     def test_mug_params_slimmed(self, tmp_path):
         ex = {k: False for k in DEFAULT_EXPORTS}

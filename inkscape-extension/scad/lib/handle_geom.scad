@@ -822,7 +822,7 @@ function handle_shell_body_overlap_volume(shell_stations, body_bez,
 // =====================================================================
 //
 // Used by mould files (case_mould_efficient, slump_mould, hump_mould,
-// case_mould_original, funnel, *_jiggering_rib) to map a legacy
+// case_mould_original, funnel, *_rib) to map a legacy
 // polyline index — emitted by Python from the original sampled
 // polyline — into the equivalent index in a freshly-tessellated
 // bezpath polyline whose density depends on $fa/$fs.

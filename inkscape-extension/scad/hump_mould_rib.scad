@@ -1,8 +1,8 @@
-// Hump Mould Jiggering Rib — OpenSCAD
+// Hump Mould Rib — OpenSCAD
 // Requires BOSL2: https://github.com/BelfrySCAD/BOSL2
 //
-// A flat template (rib) for shaping clay on a hump mould using a
-// jigger arm.  The outer mug profile defines the cutting edge.
+// A flat template (rib) for shaping clay on a hump mould by hand or using a
+// jigger arm. The outer mug profile defines the cutting edge.
 // The rib is oriented with rim at bottom (y = 0), foot at top.
 
 include <BOSL2/std.scad>

@@ -1,7 +1,7 @@
-// Slump Mould Jiggering Rib — OpenSCAD
+// Slump Mould Rib — OpenSCAD
 // Requires BOSL2: https://github.com/BelfrySCAD/BOSL2
 //
-// A flat template (rib) for shaping clay in a slump mould using a
+// A flat template (rib) for shaping clay in a slump mould by hand or using a
 // jigger arm.  The inner mug profile + actual lip shape defines the
 // cutting edge.  The blade swoops up the inner wall, curves over the
 // lip, and hooks down to max_x.

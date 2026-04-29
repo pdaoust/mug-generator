@@ -34,9 +34,9 @@ EXPORT_TO_SCAD: dict[str, str] = {
     "case_mould_efficient.scad": "case_mould_efficient",
     "funnel.scad": "funnel",
     "slump_mould.scad": "slump_mould",
-    "slump_mould_jiggering_rib.scad": "slump_rib",
+    "slump_mould_rib.scad": "slump_rib",
     "hump_mould.scad": "hump_mould",
-    "hump_mould_jiggering_rib.scad": "hump_rib",
+    "hump_mould_rib.scad": "hump_rib",
 }
 
 
@@ -231,7 +231,7 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
         lines.append(f"mark_fa = {params.get('mark_fa', 12):.6f};\n")
         lines.append(f"mark_fs = {params.get('mark_fs', 0.25):.6f};\n")
 
-    # Jiggering rib parameters
+    # Rib parameters
     if want_rib:
         for key in ("rib_thickness", "rib_taper", "rib_margin"):
             if key in params:

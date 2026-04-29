@@ -119,10 +119,10 @@ are supported.
     <page name="ribs" gui-text="Ribs">
       <param name="rib_thickness" type="float" min="0.5" max="10.0" precision="1"
              gui-text="Rib thickness (mm)"
-             gui-description="Thickness of the jiggering rib.">3.0</param>
+             gui-description="Thickness of the ribs.">3.0</param>
       <param name="rib_taper" type="float" min="0" max="20.0" precision="1"
              gui-text="Rib taper (mm)"
-             gui-description="Inset amount that tapers the cutting edge of the jiggering rib, creating a thinner leading edge for shaping clay.">6.0</param>
+             gui-description="Inset amount that tapers the cutting edge of the rib, creating a thinner leading edge for shaping clay.">6.0</param>
       <param name="rib_margin" type="float" min="2" max="50" precision="1"
              gui-text="Rib margin (mm)"
              gui-description="Margin between the outermost ribbing edge and the rectangle boundary.">20.0</param>
@@ -134,7 +134,7 @@ are supported.
       </param>
       <param name="hump_rib_direction" type="optiongroup" appearance="combo"
              gui-text="Hump rib approach direction"
-             gui-description="Direction the jigger arm approaches the hump mould. 'Top' allows a concave foot but cuts off inward lip hooks. 'Side' allows a profiled lip but cuts off a concave foot.">
+             gui-description="Direction your rib approaches the hump mould. 'Top' allows a concave foot but won't profile the lip for you. 'Side' allows a profiled lip but won't do a concave foot.">
         <option value="top">From top</option>
         <option value="side">From side</option>
       </param>
@@ -168,12 +168,12 @@ are supported.
       <param name="export_slump_mould" type="bool"
              gui-text="Slump mould">true</param>
       <param name="export_slump_rib" type="bool" indent="1"
-             gui-text="Slump mould jiggering rib"
+             gui-text="Slump mould rib"
              gui-description="Only exported if the slump mould is also exported.">true</param>
       <param name="export_hump_mould" type="bool"
              gui-text="Hump mould">true</param>
       <param name="export_hump_rib" type="bool" indent="1"
-             gui-text="Hump mould jiggering rib"
+             gui-text="Hump mould rib"
              gui-description="Only exported if the hump mould is also exported.">true</param>
       <separator />
       <param name="clay_shrinkage" type="float" min="0" max="30" precision="1"

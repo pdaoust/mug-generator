@@ -95,7 +95,7 @@ are supported.
     <page name="pouring-funnel" gui-text="Pouring funnel">
       <param name="funnel_wall_angle" type="float" min="10" max="60" precision="1"
              gui-text="Funnel wall angle (°)"
-             gui-description="Cone wall angle from vertical">30.0</param>
+             gui-description="Cone wall angle from vertical">45.0</param>
       <param name="funnel_wall" type="float" min="0.4" max="5.0" precision="1"
              gui-text="Funnel wall thickness (mm)"
              gui-description="Thickness of the funnel shell walls">1.2</param>

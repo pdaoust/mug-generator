@@ -101,7 +101,7 @@ are supported.
              gui-description="Thickness of the funnel shell walls">1.2</param>
       <param name="flange_width" type="float" min="2" max="20" precision="1"
              gui-text="Funnel flange width (mm)"
-             gui-description="Flange overhang beyond pouring hole. This keeps the funnel from falling too far into the mould as the mould wears out over time.">3.0</param>
+             gui-description="Flange overhang beyond pouring hole. This keeps the funnel from falling too far into the mould as the mould wears out over time.">6.0</param>
       <param name="breather_hole_dia" type="float" min="0.5" max="5.0" precision="1"
              gui-text="Breather hole diameter (mm)"
              gui-description="Diameter of holes in lip form. This lets air escape from the lip form as slip fills the mould.">1.0</param>

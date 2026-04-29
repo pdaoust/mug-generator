@@ -31,7 +31,7 @@ _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
 _body = mug_body_polyline(mug_body_profile_bez, _cs);
 _foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
-_tube_h = filler_tube_height * _cs;
+_tube_h = filler_tube_height;
 
 // =====================================================================
 // DERIVED PROFILES
@@ -41,6 +41,7 @@ _outer = [for (i = [0:_foot_idx]) _body[i]];
 _split_r = _body[0][0];
 _split_z = _body[0][1];
 _tube_top_z = _split_z + _tube_h;
+_tube_top_r = _split_r + _tube_h * tan(filler_tube_angle);
 
 // =====================================================================
 // DERIVED VALUES
@@ -62,7 +63,9 @@ function outer_r_at_z(z) =
         ]
     ) len(results) > 0 ? max(results) : prof[0][0];
 
-pour_hole_r = _split_r;
+// Pouring hole sits at the top of the tapered case-mould filler tube,
+// so its radius is the wider top of the frustum.
+pour_hole_r = _tube_top_r;
 cone_top_r = pour_hole_r + cone_height * tan(funnel_wall_angle);
 
 // lip_top_z: highest Z of the outer body profile
@@ -98,7 +101,10 @@ _first_vtangent_z = let(
 
 lip_bottom_z = max(lip_top_z - 3, _first_vtangent_z);
 
-neck_r = pour_hole_r - funnel_clearance;
+// Neck is a frustum matching the case-mould filler tube minus a
+// uniform funnel_clearance: neck_r_bot at lip_top_z, neck_r at flange_z.
+neck_r_bot = _split_r    - funnel_clearance;
+neck_r     = pour_hole_r - funnel_clearance;
 
 // =====================================================================
 // LIP FORM — hollow shell from mug body profile
@@ -158,29 +164,44 @@ module funnel_flange() {
         ]);
 }
 
-// 3. Cylindrical neck (inside pouring hole)
+// 3. Tapered neck (inside pouring hole) — frustum that mirrors the
+//    case-mould filler tube, offset inward by funnel_clearance.
 module funnel_neck() {
-    translate([0, 0, lip_top_z])
+    h = flange_z - lip_top_z;
+    // Extend the neck slightly past both ends so it overlaps the
+    // flange and lip form volumetrically (avoids coplanar boundary
+    // faces that yield a non-manifold union).
+    eps_top = 0.05;
+    eps_bot = 0.05;
+    h_ext = h + eps_top + eps_bot;
+    slope_r = (neck_r - neck_r_bot) / h;
+    r_bot_ext = neck_r_bot - slope_r * eps_bot;
+    r_top_ext = neck_r     + slope_r * eps_top;
+    translate([0, 0, lip_top_z - eps_bot])
         difference() {
-            cylinder(h = flange_z - lip_top_z,
-                     r = neck_r);
+            cyl(h = h_ext, r1 = r_bot_ext, r2 = r_top_ext,
+                anchor = BOTTOM);
             translate([0, 0, -0.01])
-                cylinder(h = flange_z - lip_top_z + 0.02,
-                         r = neck_r - funnel_wall);
+                cyl(h = h_ext + 0.02,
+                    r1 = r_bot_ext - funnel_wall,
+                    r2 = r_top_ext - funnel_wall,
+                    anchor = BOTTOM);
         }
 }
 
 // 4. Lip form — the mug body shell clipped to the lip region,
 //    with breather holes for slip flow.
 breather_r = breather_hole_dia / 2;
-breather_z = lip_top_z - breather_r;
+// Drop breather slightly below lip_top_z so the punch cylinder's top
+// is not coplanar with the lip Z clip boundary.
+breather_z = lip_top_z - breather_r - 0.05;
 
 module funnel_lip_form() {
     difference() {
         intersection() {
             mug_body_shell();
-            // Clip to pouring hole radius
-            cylinder(h = 2000, r = neck_r, center = true);
+            // Clip to pouring hole radius at the lip Z (tube bottom).
+            cylinder(h = 2000, r = neck_r_bot, center = true);
             // Clip to lip Z range
             translate([0, 0, (lip_top_z + lip_bottom_z) / 2])
                 cube([2000, 2000, lip_top_z - lip_bottom_z], center = true);
@@ -188,7 +209,7 @@ module funnel_lip_form() {
         // Breather holes
         for (i = [0:breather_hole_count - 1])
             rotate([0, 0, i * 360 / breather_hole_count])
-                translate([neck_r, 0, breather_z])
+                translate([neck_r_bot, 0, breather_z])
                     rotate([0, -90, 0])
                         cylinder(h = funnel_wall + 0.02,
                                  r = breather_r);

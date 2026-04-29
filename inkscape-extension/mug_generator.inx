@@ -90,12 +90,6 @@ are supported.
       <param name="key_tolerance" type="float" min="0.0" max="2.0" precision="2"
              gui-text="Key tolerance (mm)"
              gui-description="Total clearance between integrated key bumps and sockets. Half is subtracted from bumps, half added to sockets. Only used with integrated keys.">0.50</param>
-      <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
-             gui-text="Filler tube height (mm)"
-             gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>
-      <param name="filler_tube_angle" type="float" min="5.0" max="45.0" precision="1"
-             gui-text="Filler tube flare angle (°)"
-             gui-description="Flare angle of the filler tube from vertical. Larger values make the tube easier to pour into.">20.0</param>
     </page>
 
     <page name="pouring-funnel" gui-text="Pouring funnel">
@@ -114,6 +108,12 @@ are supported.
       <param name="breather_hole_count" type="int" min="2" max="24"
              gui-text="Breather hole count"
              gui-description="Number of breather holes around the lip form">6</param>
+      <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
+             gui-text="Filler tube height (mm)"
+             gui-description="Height of the pouring tube above the mug rim. Sets the case mould's top plaster cap and the funnel neck length. 15-20mm recommended.">15.0</param>
+      <param name="filler_tube_angle" type="float" min="5.0" max="45.0" precision="1"
+             gui-text="Filler tube flare angle (°)"
+             gui-description="Flare angle of the filler tube from vertical. The funnel's neck matches the case mould's tube, so this affects both. Larger values make the tube easier to pour into.">20.0</param>
     </page>
 
     <page name="ribs" gui-text="Ribs">

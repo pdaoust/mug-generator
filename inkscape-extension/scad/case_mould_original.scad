@@ -60,7 +60,7 @@ _mpoints = _mark_data[0];
 _mark_paths_idx = _mark_data[1];
 _axis = mug_axis_x * _cs;
 _mark_depth = mark_depth * _cs;
-_tube_h = filler_tube_height * _cs;
+_tube_h = filler_tube_height;
 
 // =====================================================================
 // DERIVED PROFILES
@@ -69,18 +69,20 @@ _tube_h = filler_tube_height * _cs;
 // Outer profile = body[0..body_foot_idx]
 _outer = [for (i = [0:_foot_idx]) _body[i]];
 
-// Mould profile: outer wall + filler tube (inner points removed).
+// Mould profile: outer wall + tapered filler tube (inner points removed).
 // body[0] = split point (rim), body[body_foot_idx] = foot center (r≈0).
-// Tube: up from split point at same r, then inward to axis.
-// Polygon auto-closes from (0, tube_top_z) back to split point.
+// Tube: flares from rim radius up to _tube_top_r at the mould top, then
+// inward to axis.  Polygon auto-closes from (_tube_top_r, _tube_top_z)
+// back to the split point along the slanted frustum side.
 _split_r = _body[0][0];
 _split_z = _body[0][1];
 _tube_top_z = _split_z + _tube_h;
+_tube_top_r = _split_r + _tube_h * tan(filler_tube_angle);
 
 _mould_profile = concat(
     [for (i = [0:_foot_idx]) _body[i]],
-    [[0, _tube_top_z],
-     [_split_r, _tube_top_z]]
+    [[0,           _tube_top_z],
+     [_tube_top_r, _tube_top_z]]
 );
 
 // =====================================================================
@@ -738,10 +740,14 @@ function _clip_profile_below(pts, z_cut) =
 // in z so the swept VNF has consistent outward-facing normals and
 // vnf_volume() returns a meaningful magnitude.
 
-// Mould positive: mug outer + filler tube (axis-closed via _axis_closed)
+// Mould positive: mug outer + tapered filler tube (axis-closed via
+// _axis_closed).  The frustum's slanted side runs from the rim
+// (_split_r, _split_z) up to (_tube_top_r, _tube_top_z); the axis
+// vertex closes the top.
 _mould_half = _axis_closed(concat(
     _outer,
-    [[0, _tube_top_z]]
+    [[_tube_top_r, _tube_top_z],
+     [0,           _tube_top_z]]
 ));
 _vnf_mould = _safe_sweep(_mould_half, _vol_fn);
 _vnf_handle = handle_enabled
@@ -808,7 +814,7 @@ _vnf_outer_below = _safe_sweep(_outer_below, _vol_fn);
 // Filler tube contribution above mug_max_z (the part of the filler
 // tube that doesn't already count as mug positive in _outer_above).
 _filler_above_rim = _axis_closed(_clip_profile_above(
-    [[_split_r, _split_z], [_split_r, _tube_top_z]],
+    [[_split_r, _split_z], [_tube_top_r, _tube_top_z]],
     mug_max_z
 ));
 _vnf_filler = _safe_sweep(_filler_above_rim, _vol_fn);
@@ -849,11 +855,13 @@ _v_mug_capacity = abs(vnf_volume(_vnf_inner));
 // inner rim z and outer rim z), so this slab cannot overlap the mug
 // cavity regardless of rim roll-over shape.
 _rim_top_z = max(_split_z, _body[len(_body)-1][1]);
+_slip_r_at_rim = _split_r
+    + (_rim_top_z - _split_z) * tan(filler_tube_angle);
 _slip_tube = _rim_top_z < _tube_top_z ? [
-    [0,         _rim_top_z],
-    [_split_r,  _rim_top_z],
-    [_split_r,  _tube_top_z],
-    [0,         _tube_top_z],
+    [0,              _rim_top_z],
+    [_slip_r_at_rim, _rim_top_z],
+    [_tube_top_r,    _tube_top_z],
+    [0,              _tube_top_z],
 ] : [];
 _vnf_slip_tube = _safe_sweep(_slip_tube, _vol_fn);
 _v_slip_fill = _v_mug_capacity + abs(vnf_volume(_vnf_slip_tube));

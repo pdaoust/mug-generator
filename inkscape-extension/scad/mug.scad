@@ -6,11 +6,15 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
-include <handle_stations.scad>
+include <handle_bezpaths.scad>
 include <mark_polygon.scad>
+
+_body = mug_body_polyline(mug_body_profile_bez);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez);
 
 // Profiling gate — override with -D '_profile_module="name"' on the CLI.
 _profile_module = is_undef(_profile_module) ? "" : _profile_module;
@@ -24,7 +28,8 @@ _profile_module = is_undef(_profile_module) ? "" : _profile_module;
 
 module mug_body() {
     rotate_extrude()
-        polygon(points = mug_body_profile);
+        polygon(points = bez_to_polyline(mug_body_profile_bez,
+                                         closed = mug_body_profile_closed));
 }
 
 // --- Handle (lofted skin with endcaps) ---
@@ -33,22 +38,16 @@ module mug_body() {
 // caps=true lets BOSL2 triangulate and close the ends internally,
 // ensuring proper vertex sharing between skin walls and endcaps.
 
-// Outer profile = points 0..body_foot_idx (for radius interpolation)
-_outer = [for (i = [0:body_foot_idx]) mug_body_profile[i]];
+// Outer profile = body[0..foot] (for foot-roof Z search).
+_outer = [for (i = [0:_foot_idx]) _body[i]];
 
-// Interpolate mug outer radius at height z from the outer profile.
+// Mug outer radius at height z — analytic on the body bezpath.
+// mug_r_at_z(bez, z) lives in handle_geom.scad and is resolution-
+// independent (solves the per-segment cubic in u against y=z).
+// The wrapper preserves the prior single-arg call shape used here.
 function mug_r_at_z(z) =
-    let(
-        prof = _outer, n = len(prof),
-        results = [for (i = [0:n-1])
-            let(j = (i + 1) % n,
-                z0 = prof[i][1], z1 = prof[j][1],
-                zlo = min(z0, z1), zhi = max(z0, z1))
-            if (zlo <= z && z <= zhi && abs(zhi - zlo) > 1e-9)
-                let(t = (z - z0) / (z1 - z0))
-                prof[i][0] + t * (prof[j][0] - prof[i][0])
-        ]
-    ) len(results) > 0 ? max(results) : prof[0][0];
+    let(r = mug_r_at_z_bez(mug_body_profile_bez, z))
+    is_undef(r) ? _outer[0][0] : r;
 
 // Centroid of a cross-section (list of 3D points).
 function _centroid(pts) =
@@ -76,11 +75,39 @@ function snap_to_mug(pts, axis_x, overshoot = 0.5) =
 // Handle stations arrive pre-nudged from Python.
 // Extra end-cap stations are snapped inside the mug surface for a
 // clean boolean union.
-_n_hs = len(handle_stations);
+// Compute handle stations at SCAD render time from raw rail and
+// profile bezpaths.
+_handle_stations_scad = handle_enabled
+    ? let(
+        raw_stations = sample_rails_bez(
+            handle_inner_rail_bez,
+            handle_outer_rail_bez,
+            handle_n_stations
+        ),
+        with_sides = apply_side_rails(
+            raw_stations,
+            handle_side_rail_polyline,
+            handle_side_rail_polyline
+        ),
+        profile_polyline = bez_to_polyline(handle_profile_bez, closed=true),
+        norm_profile = normalize_profile(profile_polyline),
+        polys = generate_handle_stations_bez(
+            profile_polyline, with_sides,
+            axis_x = mug_axis_x,
+            body_bez = mug_body_profile_bez
+        ),
+        nudged = nudge_handle_stations_bez(
+            polys, with_sides, norm_profile,
+            mug_body_profile_bez, mug_axis_x
+        )
+    ) nudged
+    : [];
+
+_n_hs = len(_handle_stations_scad);
 handle_stations_extended = handle_enabled ? concat(
-    [snap_to_mug(handle_stations[0], mug_axis_x)],
-    handle_stations,
-    [snap_to_mug(handle_stations[_n_hs-1], mug_axis_x)]
+    [snap_to_mug(_handle_stations_scad[0], mug_axis_x)],
+    _handle_stations_scad,
+    [snap_to_mug(_handle_stations_scad[_n_hs-1], mug_axis_x)]
 ) : [];
 
 module handle() {
@@ -93,7 +120,7 @@ module handle() {
 mug_min_z = min([for (p = _outer) p[1]]);
 
 // Z of the mug base centre (foot center on the axis).
-_foot_center_z = mug_body_profile[body_foot_idx][1];
+_foot_center_z = _body[_foot_idx][1];
 
 // Foot-roof points within 0.1mm of the foot roof.
 // Bezier interpolation can round the inner foot-ring corner, making the
@@ -101,8 +128,8 @@ _foot_center_z = mug_body_profile[body_foot_idx][1];
 // point so the stamp reaches the full surface; for embossed marks
 // we use the highest so the stamp sits above the full surface.
 _mark_tol = 0.1;
-_foot_roof_z = [for (i = [0:body_foot_idx])
-    let(z = mug_body_profile[i][1])
+_foot_roof_z = [for (i = [0:_foot_idx])
+    let(z = _body[i][1])
     if (abs(z - _foot_center_z) <= _mark_tol) z];
 _mark_z = mark_inset
     ? min(_foot_roof_z)
@@ -113,17 +140,17 @@ _mark_slices = mark_draft_angle > 0
     ? max(2, round(mark_depth / mark_layer_height))
     : 1;
 
+_mark_data = mark_tessellate(mark_bezpaths, mark_fa, mark_fs);
+_mark_pts = _mark_data[0];
+_mark_paths_idx = _mark_data[1];
+
 module mark_stamp() {
     // $fn = 0 so mark_fa / mark_fs control arc resolution here,
     // even when a global $fn is set for the rest of the mug.
-    if (len(mark_points) > 0) {
+    if (len(_mark_pts) > 0) {
         if (mark_draft_angle > 0) {
             _dz = mark_depth / _mark_slices;
             for (i = [0:_mark_slices - 1]) {
-                // Debossed: 0 → -draft (inset deepens with z).
-                // Embossed: +draft → 0 (outset at z=0, original at
-                // z=mark_depth; mirror in assembly flips so the
-                // widest end becomes the visible tip).
                 _t = i / (_mark_slices - 1);
                 _r = mark_inset
                     ? -_mark_draft * _t
@@ -131,11 +158,11 @@ module mark_stamp() {
                 translate([0, 0, i * _dz])
                     linear_extrude(height = _dz + 0.001)
                         offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
-                            polygon(points = mark_points, paths = mark_paths);
+                            polygon(points = _mark_pts, paths = _mark_paths_idx);
             }
         } else
             linear_extrude(height = mark_depth)
-                polygon(points = mark_points, paths = mark_paths);
+                polygon(points = _mark_pts, paths = _mark_paths_idx);
     }
 }
 
@@ -184,8 +211,7 @@ if (_profile_module == "") {
 // =====================================================================
 
 if (_profile_module == "") {
-    _inner = [for (i = [body_foot_idx:len(mug_body_profile)-1])
-        mug_body_profile[i]];
+    _inner = [for (i = [_foot_idx:len(_body)-1]) _body[i]];
     _vnf_inner = rotate_sweep(_inner, caps=true, $fn=36);
     _v_mug_ml = round(abs(vnf_volume(_vnf_inner)) / 1000);
 

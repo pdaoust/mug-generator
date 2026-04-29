@@ -30,7 +30,8 @@ def emitter(name: str, needs: Callable[[dict[str, bool]], bool] | None = None):
 # Files not in this map are always copied (shared helpers).
 EXPORT_TO_SCAD: dict[str, str] = {
     "mug.scad": "prototype",
-    "case_mould.scad": "case_mould",
+    "case_mould_original.scad": "case_mould",
+    "case_mould_efficient.scad": "case_mould_efficient",
     "funnel.scad": "funnel",
     "slump_mould.scad": "slump_mould",
     "slump_mould_jiggering_rib.scad": "slump_rib",
@@ -77,57 +78,57 @@ def _emit_profile_array(name: str, profile: list, output_dir: Path, filename: st
 
 @emitter("mug_body_profile")
 def _emit_mug_body_profile(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit mug_body_profile.scad — single closed cross-section."""
-    _emit_profile_array(
-        "mug_body_profile", data["mug_body_profile"],
-        output_dir, "mug_body_profile.scad",
-    )
+    """Emit mug_body_profile.scad with the body bezpath."""
+    bez = data["mug_body_profile_bez"]
+    closed = bool(data.get("mug_body_profile_closed"))
+    lines = [HEADER, "mug_body_profile_bez = [\n"]
+    for i, pt in enumerate(bez):
+        comma = "," if i < len(bez) - 1 else ""
+        lines.append(f"  {_format_point_2d(pt)}{comma}\n")
+    lines.append("];\n")
+    lines.append(f"mug_body_profile_closed = {'true' if closed else 'false'};\n")
+    (output_dir / "mug_body_profile.scad").write_text("".join(lines))
 
 
 @emitter(
-    "handle_stations",
-    needs=lambda ex: _any(ex, "prototype", "case_mould"),
+    "handle_bezpaths",
+    needs=lambda ex: _any(ex, "prototype", "case_mould", "case_mould_efficient"),
 )
-def _emit_handle_stations(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit handle_stations.scad."""
-    stations = data["handle_stations"]  # list of list of [x,y,z]
+def _emit_handle_bezpaths(data: dict[str, Any], output_dir: Path) -> None:
+    """Emit handle_bezpaths.scad with raw rail / profile bezpaths."""
+    inner_bez = data.get("handle_inner_rail_bez")
+    outer_bez = data.get("handle_outer_rail_bez")
+    side_rail_polyline = data.get("handle_side_rail_polyline")
+    profile_bez = data.get("handle_profile_bez")
+    n_stations_data = data.get("handle_n_stations")
+
     lines = [HEADER]
-    if not stations:
-        lines.append("handle_stations = [];\n")
-    else:
-        lines.append("handle_stations = [\n")
-        for si, poly in enumerate(stations):
-            lines.append("  [\n")
-            for pi, pt in enumerate(poly):
-                comma = "," if pi < len(poly) - 1 else ""
-                lines.append(f"    {_format_point_3d(pt)}{comma}\n")
-            comma = "," if si < len(stations) - 1 else ""
-            lines.append(f"  ]{comma}\n")
+
+    def _emit_2d_array(name, pts):
+        lines.append(f"{name} = [\n")
+        for i, pt in enumerate(pts):
+            comma = "," if i < len(pts) - 1 else ""
+            lines.append(f"  {_format_point_2d(pt)}{comma}\n")
         lines.append("];\n")
 
-    (output_dir / "handle_stations.scad").write_text("".join(lines))
-
-
-@emitter(
-    "handle_path",
-    needs=lambda ex: _any(ex, "prototype"),
-)
-def _emit_handle_path(data: dict[str, Any], output_dir: Path) -> None:
-    """Emit handle_path.scad (debug centroids)."""
-    if "handle_path" not in data:
-        return
-    path = data["handle_path"]  # list of [x,y,z]
-    lines = [HEADER]
-    if not path:
-        lines.append("handle_path = [];\n")
+    if inner_bez and outer_bez and profile_bez:
+        _emit_2d_array("handle_inner_rail_bez", inner_bez)
+        _emit_2d_array("handle_outer_rail_bez", outer_bez)
+        _emit_2d_array("handle_profile_bez", profile_bez)
+        if side_rail_polyline:
+            _emit_2d_array("handle_side_rail_polyline", side_rail_polyline)
+        else:
+            lines.append("handle_side_rail_polyline = [];\n")
+        if n_stations_data is not None:
+            lines.append(f"handle_n_stations = {int(n_stations_data)};\n")
     else:
-        lines.append("handle_path = [\n")
-        for i, pt in enumerate(path):
-            comma = "," if i < len(path) - 1 else ""
-            lines.append(f"  {_format_point_3d(pt)}{comma}\n")
-        lines.append("];\n")
+        lines.append("handle_inner_rail_bez = [];\n")
+        lines.append("handle_outer_rail_bez = [];\n")
+        lines.append("handle_profile_bez = [];\n")
+        lines.append("handle_side_rail_polyline = [];\n")
+        lines.append("handle_n_stations = 0;\n")
 
-    (output_dir / "handle_path.scad").write_text("".join(lines))
+    (output_dir / "handle_bezpaths.scad").write_text("".join(lines))
 
 
 @emitter("mug_params")
@@ -143,14 +144,16 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
 
     if exports is None:
         # No selection supplied — emit everything (backwards-compatible).
-        want_case_mould = want_mould_any = want_filler_tube = True
+        want_case_mould = want_case_mould_efficient = True
+        want_mould_any = want_filler_tube = True
         want_funnel = want_mark = want_rib = want_hump_rib = True
     else:
-        want_case_mould = exports.get("case_mould", False)
-        want_mould_any = _any(exports, "case_mould", "slump_mould", "hump_mould")
-        want_filler_tube = _any(exports, "case_mould", "funnel")
+        want_case_mould = _any(exports, "case_mould", "case_mould_efficient")
+        want_case_mould_efficient = exports.get("case_mould_efficient", False)
+        want_mould_any = _any(exports, "case_mould", "case_mould_efficient", "slump_mould", "hump_mould")
+        want_filler_tube = _any(exports, "case_mould", "case_mould_efficient", "funnel")
         want_funnel = exports.get("funnel", False)
-        want_mark = _any(exports, "prototype", "case_mould", "slump_mould")
+        want_mark = _any(exports, "prototype", "case_mould", "case_mould_efficient", "slump_mould")
         want_rib = _any(exports, "slump_rib", "hump_rib")
         want_hump_rib = exports.get("hump_rib", False)
 
@@ -174,19 +177,17 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     if "clay_shrinkage_pct" in params:
         lines.append(f"clay_shrinkage_pct = {params['clay_shrinkage_pct']:.1f};\n")
 
-    # Body profile indices — used by all mould/rib consumers
-    if "body_foot_idx" in params:
-        lines.append(f"body_foot_idx = {params['body_foot_idx']};\n")
-
     # Shared plaster-mould parameters (used by case, slump, and hump moulds)
     if want_mould_any:
         for key in ("plaster_thickness", "wall_thickness"):
             if key in params:
                 lines.append(f"{key} = {params[key]:.6f};\n")
 
-    # filler_tube_height is consumed by the case mould and the funnel
+    # filler_tube_height / angle is consumed by the case mould and the funnel
     if want_filler_tube and "filler_tube_height" in params:
         lines.append(f"filler_tube_height = {params['filler_tube_height']:.6f};\n")
+    if want_filler_tube and "filler_tube_angle" in params:
+        lines.append(f"filler_tube_angle = {params['filler_tube_angle']:.6f};\n")
 
     # Case-mould-only parameters
     if want_case_mould:
@@ -200,6 +201,16 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
                 lines.append(f"{key} = {params[key]:.6f};\n")
         if "mould_type" in params:
             lines.append(f"mould_type = {params['mould_type']};\n")
+
+    # Case-mould-efficient derived parameters
+    if want_case_mould_efficient:
+        if "needs_base" in params:
+            lines.append(
+                f"needs_base = {'true' if params['needs_base'] else 'false'};\n"
+            )
+        for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled"):
+            if key in params:
+                lines.append(f"{key} = {params[key]:.6f};\n")
 
     # Funnel parameters
     if want_funnel:
@@ -235,7 +246,7 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
 
 @emitter(
     "mark_polygon",
-    needs=lambda ex: _any(ex, "prototype", "case_mould", "slump_mould"),
+    needs=lambda ex: _any(ex, "prototype", "case_mould", "case_mould_efficient", "slump_mould"),
 )
 def _emit_mark_polygon(data: dict[str, Any], output_dir: Path) -> None:
     """Emit mark_polygon.scad with flat points + paths arrays.
@@ -245,34 +256,20 @@ def _emit_mark_polygon(data: dict[str, Any], output_dir: Path) -> None:
     array of index lists (one per subpath).  This avoids the
     skin() + difference() approach that produced non-manifold meshes.
     """
-    polys = data.get("mark_polygons")
+    bezpaths = data.get("mark_bezpaths")
     lines = [HEADER]
 
-    if not polys:
-        lines.append("mark_points = [];\n")
-        lines.append("mark_paths = [];\n")
+    if not bezpaths:
+        lines.append("mark_bezpaths = [];\n")
     else:
-        # Flatten all polygons into one points array, build paths
-        all_pts: list[tuple[float, float]] = []
-        paths: list[list[int]] = []
-        for poly in polys:
-            pts = poly[:-1] if _is_closed(poly) else poly
-            start = len(all_pts)
-            path_indices = list(range(start, start + len(pts)))
-            all_pts.extend(pts)
-            paths.append(path_indices)
-
-        lines.append("mark_points = [\n")
-        for i, pt in enumerate(all_pts):
-            comma = "," if i < len(all_pts) - 1 else ""
-            lines.append(f"  {_format_point_2d(pt)}{comma}\n")
-        lines.append("];\n")
-
-        lines.append("mark_paths = [\n")
-        for i, path in enumerate(paths):
-            comma = "," if i < len(paths) - 1 else ""
-            idx_str = ", ".join(str(j) for j in path)
-            lines.append(f"  [{idx_str}]{comma}\n")
+        lines.append("mark_bezpaths = [\n")
+        for bi, bez in enumerate(bezpaths):
+            outer_comma = "," if bi < len(bezpaths) - 1 else ""
+            lines.append("  [\n")
+            for pi, pt in enumerate(bez):
+                comma = "," if pi < len(bez) - 1 else ""
+                lines.append(f"    {_format_point_2d(pt)}{comma}\n")
+            lines.append(f"  ]{outer_comma}\n")
         lines.append("];\n")
 
     (output_dir / "mark_polygon.scad").write_text("".join(lines))

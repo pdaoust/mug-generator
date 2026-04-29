@@ -10,6 +10,7 @@
 // positive so it transfers through: positive → plaster → clay.
 
 include <BOSL2/std.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -21,8 +22,11 @@ include <mark_polygon.scad>
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_body = [for (p = mug_body_profile) p * _cs];
-_mpoints = [for (p = mark_points) p * _cs];
+_body = mug_body_polyline(mug_body_profile_bez, _cs);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
+_mark_data = mark_tessellate(mark_bezpaths, mark_fa, mark_fs, _cs);
+_mpoints = _mark_data[0];
+_mark_paths_idx = _mark_data[1];
 _mark_depth_s = mark_depth * _cs;
 
 // =====================================================================
@@ -30,7 +34,7 @@ _mark_depth_s = mark_depth * _cs;
 // =====================================================================
 // _outer goes rim -> foot.  Reverse so it goes foot -> rim.
 
-_outer_rim_first = [for (i = [0:body_foot_idx]) _body[i]];
+_outer_rim_first = [for (i = [0:_foot_idx]) _body[i]];
 _outer = [for (i = [len(_outer_rim_first)-1:-1:0]) _outer_rim_first[i]];
 
 _outer_max_x = max([for (p = _outer) p[0]]);
@@ -77,9 +81,9 @@ _flipped = [for (p = _profile)
 // The mark transfers: positive -> plaster mould -> clay piece.
 // Debossed on mug = subtract from positive; embossed = add to positive.
 
-_foot_center_z_orig = _body[body_foot_idx][1];
+_foot_center_z_orig = _body[_foot_idx][1];
 _mark_tol = 0.1;
-_foot_roof_z_vals = [for (i = [0:body_foot_idx])
+_foot_roof_z_vals = [for (i = [0:_foot_idx])
     let(z = _body[i][1])
     if (abs(z - _foot_center_z_orig) <= _mark_tol) z];
 _mark_z_orig = mark_inset
@@ -106,11 +110,11 @@ module mark_stamp() {
                 translate([0, 0, i * _dz])
                     linear_extrude(height = _dz + 0.001, convexity = 4)
                         offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
-                            polygon(points = _mpoints, paths = mark_paths);
+                            polygon(points = _mpoints, paths = _mark_paths_idx);
             }
         } else
             linear_extrude(height = _mark_depth_s, convexity = 4)
-                polygon(points = _mpoints, paths = mark_paths);
+                polygon(points = _mpoints, paths = _mark_paths_idx);
     }
 }
 

@@ -362,6 +362,272 @@ def _parse_path_d(d: str, fa_deg: float | None = None,
     return points
 
 
+def _line_to_bezier(p0: tuple[float, float],
+                    p1: tuple[float, float]) -> list[tuple[float, float]]:
+    """Encode a straight chord as a cubic Bezier with handles at 1/3 and 2/3.
+
+    Returns three points (c1, c2, knot1) — the caller already has knot0.
+    """
+    c1 = (p0[0] + (p1[0] - p0[0]) / 3, p0[1] + (p1[1] - p0[1]) / 3)
+    c2 = (p0[0] + 2 * (p1[0] - p0[0]) / 3, p0[1] + 2 * (p1[1] - p0[1]) / 3)
+    return [c1, c2, p1]
+
+
+def _path_d_to_bezpath(d: str) -> tuple[list[tuple[float, float]], bool]:
+    """Parse an SVG path 'd' attribute into a cubic-Bezier bezpath.
+
+    Output layout matches BOSL2: ``[k0, c0a, c0b, k1, c1a, c1b, k2, ...]``,
+    one knot at the start and three points per segment.
+
+    - L/H/V/M-implicit lines are encoded as cubic Beziers with handles
+      at 1/3 and 2/3 of the chord (a uniform format avoids special cases
+      in the SCAD consumer).
+    - Q/T quadratics are converted to cubics via the standard formula.
+    - C/S cubics pass through unchanged.
+    - A arcs are tessellated to a polyline (via ``_arc_to_points`` with a
+      conservative resolution) and each consecutive pair is encoded as a
+      straight cubic Bezier — analytic arc-to-cubic conversion is left
+      for a later refinement.
+    - Z closes the path; the caller gets ``closed=True`` and the returned
+      bezpath does **not** repeat the start knot at the end (BOSL2 convention
+      for closed bezpaths is to repeat it; we let the consumer add it via
+      ``closed`` flag handling).
+
+    Returns:
+        (bezpath, closed) — bezpath is a flat list of (x, y) tuples; closed
+        is True if the path ends with a Z command.
+    """
+    if not d:
+        return ([], False)
+
+    tokens = re.findall(
+        r'[MLHVCSQTAZmlhvcsqtaz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?', d
+    )
+
+    bez: list[tuple[float, float]] = []
+    current = (0.0, 0.0)
+    start = (0.0, 0.0)
+    last_cubic_c2: tuple[float, float] | None = None
+    last_quad_c1: tuple[float, float] | None = None
+    closed = False
+    i = 0
+
+    def next_float():
+        nonlocal i
+        i += 1
+        return float(tokens[i - 1])
+
+    def emit_line(target):
+        nonlocal current
+        bez.extend(_line_to_bezier(current, target))
+        current = target
+
+    def emit_cubic(c1, c2, target):
+        nonlocal current
+        bez.extend([c1, c2, target])
+        current = target
+
+    while i < len(tokens):
+        cmd = tokens[i]
+        i += 1
+
+        if cmd in ('M', 'm'):
+            x, y = next_float(), next_float()
+            if cmd == 'm':
+                x += current[0]; y += current[1]
+            current = (x, y)
+            start = current
+            if not bez:
+                bez.append(current)
+            else:
+                # Subsequent M starts a new subpath; we only support a
+                # single subpath per call site here (compound paths are
+                # split upstream by _split_subpath_d).
+                bez.append(current)
+            last_cubic_c2 = None
+            last_quad_c1 = None
+            # Implicit lineto for additional coordinate pairs
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x, y = next_float(), next_float()
+                if cmd == 'm':
+                    x += current[0]; y += current[1]
+                emit_line((x, y))
+                last_cubic_c2 = None
+                last_quad_c1 = None
+
+        elif cmd in ('L', 'l'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x, y = next_float(), next_float()
+                if cmd == 'l':
+                    x += current[0]; y += current[1]
+                emit_line((x, y))
+                last_cubic_c2 = None
+                last_quad_c1 = None
+
+        elif cmd in ('H', 'h'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x = next_float()
+                if cmd == 'h':
+                    x += current[0]
+                emit_line((x, current[1]))
+                last_cubic_c2 = None
+                last_quad_c1 = None
+
+        elif cmd in ('V', 'v'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                y = next_float()
+                if cmd == 'v':
+                    y += current[1]
+                emit_line((current[0], y))
+                last_cubic_c2 = None
+                last_quad_c1 = None
+
+        elif cmd in ('C', 'c'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x1, y1 = next_float(), next_float()
+                x2, y2 = next_float(), next_float()
+                x, y = next_float(), next_float()
+                if cmd == 'c':
+                    x1 += current[0]; y1 += current[1]
+                    x2 += current[0]; y2 += current[1]
+                    x += current[0]; y += current[1]
+                emit_cubic((x1, y1), (x2, y2), (x, y))
+                last_cubic_c2 = (x2, y2)
+                last_quad_c1 = None
+
+        elif cmd in ('S', 's'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x2, y2 = next_float(), next_float()
+                x, y = next_float(), next_float()
+                if cmd == 's':
+                    x2 += current[0]; y2 += current[1]
+                    x += current[0]; y += current[1]
+                if last_cubic_c2 is not None:
+                    x1 = 2 * current[0] - last_cubic_c2[0]
+                    y1 = 2 * current[1] - last_cubic_c2[1]
+                else:
+                    x1, y1 = current
+                emit_cubic((x1, y1), (x2, y2), (x, y))
+                last_cubic_c2 = (x2, y2)
+                last_quad_c1 = None
+
+        elif cmd in ('Q', 'q'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                qx1, qy1 = next_float(), next_float()
+                x, y = next_float(), next_float()
+                if cmd == 'q':
+                    qx1 += current[0]; qy1 += current[1]
+                    x += current[0]; y += current[1]
+                # Quadratic → cubic
+                cp1 = (current[0] + 2/3 * (qx1 - current[0]),
+                       current[1] + 2/3 * (qy1 - current[1]))
+                cp2 = (x + 2/3 * (qx1 - x), y + 2/3 * (qy1 - y))
+                emit_cubic(cp1, cp2, (x, y))
+                last_quad_c1 = (qx1, qy1)
+                last_cubic_c2 = None
+
+        elif cmd in ('T', 't'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                x, y = next_float(), next_float()
+                if cmd == 't':
+                    x += current[0]; y += current[1]
+                if last_quad_c1 is not None:
+                    qx1 = 2 * current[0] - last_quad_c1[0]
+                    qy1 = 2 * current[1] - last_quad_c1[1]
+                else:
+                    qx1, qy1 = current
+                cp1 = (current[0] + 2/3 * (qx1 - current[0]),
+                       current[1] + 2/3 * (qy1 - current[1]))
+                cp2 = (x + 2/3 * (qx1 - x), y + 2/3 * (qy1 - y))
+                emit_cubic(cp1, cp2, (x, y))
+                last_quad_c1 = (qx1, qy1)
+                last_cubic_c2 = None
+
+        elif cmd in ('A', 'a'):
+            while i < len(tokens) and tokens[i] not in 'MLHVCSQTAZmlhvcsqtaz':
+                rx_val = next_float()
+                ry_val = next_float()
+                x_rot = next_float()
+                large_arc = int(next_float())
+                sweep = int(next_float())
+                x, y = next_float(), next_float()
+                if cmd == 'a':
+                    x += current[0]; y += current[1]
+                # Tessellate the arc, then encode each chord as a
+                # straight cubic.  Resolution here is decoupled from
+                # OpenSCAD's $fa/$fs (rendering happens downstream); use
+                # a fixed dense ~3° step so the chord-to-arc error is
+                # under 0.04% of the arc radius.
+                arc_pts = _arc_to_points(
+                    current[0], current[1], rx_val, ry_val,
+                    x_rot, large_arc, sweep, x, y,
+                    fa_deg=3.0, fs=None,
+                )
+                for ap in arc_pts:
+                    emit_line(ap)
+                last_cubic_c2 = None
+                last_quad_c1 = None
+
+        elif cmd in ('Z', 'z'):
+            closed = True
+            # Close back to start with a straight cubic if we haven't
+            # already arrived there.
+            if (abs(current[0] - start[0]) > 1e-9 or
+                    abs(current[1] - start[1]) > 1e-9):
+                emit_line(start)
+            last_cubic_c2 = None
+            last_quad_c1 = None
+
+    return (bez, closed)
+
+
+def get_layer_paths_bez(
+    svg_root, label: str,
+) -> list[tuple[list[tuple[float, float]], bool]]:
+    """Extract all paths from a named layer as cubic-Bezier bezpaths.
+
+    Returns a list of ``(bezpath, closed)`` tuples in document coordinates,
+    with composed transforms applied to every control point.
+
+    Bezpath layout: ``[k0, c0a, c0b, k1, c1a, c1b, k2, ...]`` (cubic, BOSL2
+    convention).
+
+    Raises:
+        ValueError: If the layer is not found.
+    """
+    layer = find_layer(svg_root, label)
+    if layer is None:
+        raise ValueError(
+            f"Layer '{label}' not found. Check that the layer exists and has "
+            f"the correct inkscape:label attribute."
+        )
+
+    out: list[tuple[list[tuple[float, float]], bool]] = []
+    ns_path = f"{{{SVG_NS}}}path"
+
+    for elem in layer.iter():
+        tag = elem.tag if isinstance(elem.tag, str) else ""
+        if tag != ns_path and tag != "path":
+            continue
+
+        d = elem.get("d", "")
+        if not d:
+            continue
+
+        transform = _get_composed_transform(elem, svg_root)
+
+        # Single subpath per element for now (the body profile and the
+        # rails/profile/side-rails are all single-subpath).  Compound
+        # paths (e.g. marks) need _split_subpath_d-based extraction.
+        bez, closed = _path_d_to_bezpath(d)
+        if not bez:
+            continue
+        bez = _apply_transform_2x3(bez, transform)
+        out.append((bez, closed))
+
+    return out
+
+
 def _apply_transform_2x3(points, matrix):
     """Apply a 2x3 affine transform matrix to a list of 2D points.
 
@@ -583,6 +849,43 @@ def get_layer_mark_polygons(
             polygons.append(transformed)
 
     return polygons
+
+
+def get_layer_mark_bezpaths(
+    svg_root, label: str,
+) -> list[tuple[list[tuple[float, float]], bool]]:
+    """Extract mark paths as cubic-Bezier bezpaths, splitting compound paths.
+
+    Each <path>'s 'd' is split at M/m boundaries so compound shapes (e.g.
+    letters with holes) become separate bezpaths.  Composed transforms
+    are applied to every control point.
+
+    Returns a list of ``(bezpath, closed)`` tuples; empty if the layer
+    is missing.
+    """
+    layer = find_layer(svg_root, label)
+    if layer is None:
+        return []
+
+    out: list[tuple[list[tuple[float, float]], bool]] = []
+    ns_path = f"{{{SVG_NS}}}path"
+
+    for elem in layer.iter():
+        tag = elem.tag if isinstance(elem.tag, str) else ""
+        if tag != ns_path and tag != "path":
+            continue
+        d = elem.get("d", "")
+        if not d:
+            continue
+        transform = _get_composed_transform(elem, svg_root)
+        for sub_d in _split_subpath_d(d):
+            bez, closed = _path_d_to_bezpath(sub_d)
+            if not bez:
+                continue
+            bez = _apply_transform_2x3(bez, transform)
+            out.append((bez, closed))
+
+    return out
 
 
 def get_layer_paths(svg_root, label: str, fa_deg: float | None = None,

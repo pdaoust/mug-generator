@@ -11,6 +11,7 @@
 //   4. Lip form — shapes the mug's lip/rim
 
 include <BOSL2/std.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -28,14 +29,15 @@ funnel_clearance = 0.5;     // Gap between neck and pouring hole (mm)
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_body = [for (p = mug_body_profile) p * _cs];
+_body = mug_body_polyline(mug_body_profile_bez, _cs);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 _tube_h = filler_tube_height * _cs;
 
 // =====================================================================
 // DERIVED PROFILES
 // =====================================================================
 
-_outer = [for (i = [0:body_foot_idx]) _body[i]];
+_outer = [for (i = [0:_foot_idx]) _body[i]];
 _split_r = _body[0][0];
 _split_z = _body[0][1];
 _tube_top_z = _split_z + _tube_h;
@@ -69,7 +71,7 @@ lip_top_z = _split_z;
 // Vertical-tangent detection: walk the inner profile downward from
 // lip_top_z.  The rim area narrows; at some point the bowl widens again.
 // The lip form stops at the last narrowing node.
-_inner = [for (i = [body_foot_idx:len(_body)-1]) _body[i]];
+_inner = [for (i = [_foot_idx:len(_body)-1]) _body[i]];
 
 function _sort_by_z_desc(pts) =
     len(pts) <= 1 ? pts :

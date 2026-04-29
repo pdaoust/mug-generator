@@ -10,10 +10,11 @@
 
 include <BOSL2/std.scad>
 include <BOSL2/skin.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
-include <handle_stations.scad>
+include <handle_bezpaths.scad>
 include <mark_polygon.scad>
 
 // Profiling gate — override with -D '_profile_module="name"' on the CLI.
@@ -33,11 +34,30 @@ explode_gap = 20;
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_body = [for (p = mug_body_profile) p * _cs];
-_hstations = handle_enabled
-    ? [for (s = handle_stations) [for (p = s) p * _cs]]
+_body = mug_body_polyline(mug_body_profile_bez, _cs);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
+
+_hstations_raw = handle_enabled
+    ? let(
+        raw = sample_rails_bez(handle_inner_rail_bez, handle_outer_rail_bez,
+                               handle_n_stations),
+        with_sides = apply_side_rails(raw,
+                                      handle_side_rail_polyline,
+                                      handle_side_rail_polyline),
+        prof = bez_to_polyline(handle_profile_bez, closed=true),
+        norm = normalize_profile(prof),
+        polys = generate_handle_stations_bez(prof, with_sides,
+                                             axis_x = mug_axis_x,
+                                             body_bez = mug_body_profile_bez)
+    ) nudge_handle_stations_bez(polys, with_sides, norm,
+                                mug_body_profile_bez, mug_axis_x)
     : [];
-_mpoints = [for (p = mark_points) p * _cs];
+_hstations = handle_enabled
+    ? [for (s = _hstations_raw) [for (p = s) p * _cs]]
+    : [];
+_mark_data = mark_tessellate(mark_bezpaths, mark_fa, mark_fs, _cs);
+_mpoints = _mark_data[0];
+_mark_paths_idx = _mark_data[1];
 _axis = mug_axis_x * _cs;
 _mark_depth = mark_depth * _cs;
 _tube_h = filler_tube_height * _cs;
@@ -47,7 +67,7 @@ _tube_h = filler_tube_height * _cs;
 // =====================================================================
 
 // Outer profile = body[0..body_foot_idx]
-_outer = [for (i = [0:body_foot_idx]) _body[i]];
+_outer = [for (i = [0:_foot_idx]) _body[i]];
 
 // Mould profile: outer wall + filler tube (inner points removed).
 // body[0] = split point (rim), body[body_foot_idx] = foot center (r≈0).
@@ -58,7 +78,7 @@ _split_z = _body[0][1];
 _tube_top_z = _split_z + _tube_h;
 
 _mould_profile = concat(
-    [for (i = [0:body_foot_idx]) _body[i]],
+    [for (i = [0:_foot_idx]) _body[i]],
     [[0, _tube_top_z],
      [_split_r, _tube_top_z]]
 );
@@ -92,9 +112,9 @@ module mug_body() {
 }
 
 // --- Maker's mark stamp ---
-_foot_center_z = _body[body_foot_idx][1];
+_foot_center_z = _body[_foot_idx][1];
 _mark_tol = 0.1;
-_foot_roof_z_mould = [for (i = [0:body_foot_idx])
+_foot_roof_z_mould = [for (i = [0:_foot_idx])
     let(z = _body[i][1])
     if (abs(z - _foot_center_z) <= _mark_tol) z];
 _mark_z = mark_inset
@@ -120,11 +140,11 @@ module mark_stamp() {
                 translate([0, 0, i * _dz])
                     linear_extrude(height = _dz + 0.001, convexity = 4)
                         offset(r = _r, $fn = 0, $fa = mark_fa, $fs = mark_fs)
-                            polygon(points = _mpoints, paths = mark_paths);
+                            polygon(points = _mpoints, paths = _mark_paths_idx);
             }
         } else
             linear_extrude(height = _mark_depth, convexity = 4)
-                polygon(points = _mpoints, paths = mark_paths);
+                polygon(points = _mpoints, paths = _mark_paths_idx);
     }
 }
 
@@ -760,7 +780,7 @@ _handle_halo_region = handle_enabled
 
 _inner_hull_region_unclipped = handle_enabled
     ? union(_mug_halo_region,
-            union([_handle_halo_region, _handle_outer_2d]))
+            union([_handle_halo_region, [_handle_outer_2d]]))
     : _mug_halo_region;
 
 // Clip above inner_top_z (same clip mould_hull_2d applies at render time).
@@ -820,7 +840,7 @@ _v_3part_base = _v_base_box_interior - _v_foot_positive;
 // --- Slip volumes (greenware, clay-scaled) ---
 
 // Mug interior capacity: inner profile foot→rim, axis-closed.
-_inner = _axis_closed([for (i = [body_foot_idx:len(_body)-1]) _body[i]]);
+_inner = _axis_closed([for (i = [_foot_idx:len(_body)-1]) _body[i]]);
 _vnf_inner = _safe_sweep(_inner, _vol_fn);
 _v_mug_capacity = abs(vnf_volume(_vnf_inner));
 

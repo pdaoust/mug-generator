@@ -1,30 +1,26 @@
 """SVG preview layer for mug generator output.
 
-Draws a semi-transparent preview of the mug body silhouette and handle
-footprint into a scratch layer in the SVG document.
+Draws a semi-transparent silhouette of the mug body, handle rails, side
+rail width, and funnel into a scratch layer in the SVG document.
+
+Stations are no longer drawn here — they only exist post-SCAD-render.
+The rails / profile / side-rail geometry uses raw SVG bezier control
+polygons (close enough to the curve for a preview).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .rail_sampler import Station
-
-# Inkscape/SVG namespaces
 SVG_NS = "http://www.w3.org/2000/svg"
 INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape"
 
 PREVIEW_LABEL = "_preview"
-PREVIEW_STYLE = "fill:magenta;fill-opacity:0.3;stroke:magenta;stroke-width:0.5;stroke-opacity:0.6"
+BODY_STYLE = "fill:magenta;fill-opacity:0.3;stroke:magenta;stroke-width:0.5;stroke-opacity:0.6"
+RAIL_STYLE = "fill:none;stroke:red;stroke-width:0.8;stroke-opacity:0.6"
 SIDE_RAIL_STYLE = "fill:green;fill-opacity:0.3;stroke:green;stroke-width:0.5;stroke-opacity:0.6"
-INDICATOR_STYLE = "fill:none;stroke:red;stroke-width:1;stroke-opacity:0.8"
-STATION_STYLE = "fill:none;stroke:red;stroke-width:0.3;stroke-opacity:0.4"
 FUNNEL_STYLE = "fill:dodgerblue;fill-opacity:0.3;stroke:dodgerblue;stroke-width:0.5;stroke-opacity:0.6"
 
 
 def _get_etree():
-    """Return the appropriate ElementTree module — lxml if inkex is loaded, else stdlib."""
     try:
         from lxml import etree
         return etree
@@ -34,7 +30,6 @@ def _get_etree():
 
 
 def _find_or_create_preview_layer(svg):
-    """Find or create the _preview scratch layer, clearing any existing content."""
     etree = _get_etree()
 
     for layer in svg.findall(f".//{{{SVG_NS}}}g"):
@@ -44,7 +39,6 @@ def _find_or_create_preview_layer(svg):
                 layer.remove(child)
             return layer
 
-    # Create new layer using the same element type as the svg tree
     layer = etree.SubElement(svg, f"{{{SVG_NS}}}g")
     layer.set(f"{{{INKSCAPE_NS}}}label", PREVIEW_LABEL)
     layer.set(f"{{{INKSCAPE_NS}}}groupmode", "layer")
@@ -52,105 +46,69 @@ def _find_or_create_preview_layer(svg):
 
 
 def _add_path(layer, d: str, style: str) -> None:
-    """Add a path element to a layer, using whatever etree the layer belongs to."""
     etree = _get_etree()
     path_elem = etree.SubElement(layer, f"{{{SVG_NS}}}path")
     path_elem.set("d", d)
     path_elem.set("style", style)
 
 
-def _points_to_path_d(points: list[tuple[float, float]]) -> str:
-    """Convert a list of (x, y) points to an SVG path 'd' attribute."""
+def _points_to_path_d(points, closed=True) -> str:
     if not points:
         return ""
     parts = [f"M {points[0][0]:.4f},{points[0][1]:.4f}"]
     for p in points[1:]:
         parts.append(f"L {p[0]:.4f},{p[1]:.4f}")
-    parts.append("Z")
+    if closed:
+        parts.append("Z")
     return " ".join(parts)
 
 
 def draw_preview(
     svg,
-    mug_profile_svg: list[tuple[float, float]],
-    stations: list["Station"],
-    handle_stations_3d: list[list[tuple[float, float, float]]],
-    side_rail_svg: list[tuple[float, float]] | None = None,
+    body_bez_svg,
+    inner_rail_mm=None,
+    outer_rail_mm=None,
+    side_rail_svg=None,
     vb_bottom: float = 0.0,
-    funnel_outline_mm: list[tuple[float, float]] | None = None,
+    scale: float = 1.0,
+    doc_units: str = "mm",
 ) -> None:
-    """Draw preview geometry into the _preview layer.
+    """Draw a mug-body silhouette + handle rails + side rail + funnel hint.
 
-    Args:
-        svg: SVG root element.
-        mug_profile_svg: Mug outer profile as [(x, y), ...] in SVG user units.
-        stations: Sampled handle stations.
-        handle_stations_3d: 3D handle cross-section polygons.
-        side_rail_svg: Side rail as [(x, y), ...] in SVG user units.
-        vb_bottom: Bottom Y of the viewBox (used to map 3D Z back to SVG Y).
-        funnel_outline_mm: Right-half funnel silhouette as [(r, z), ...] in mm.
+    Geometry is drawn from the raw SVG bezier control polygons — close
+    enough for a preview without re-tessellating in Python.
     """
     layer = _find_or_create_preview_layer(svg)
 
-    # Mug body silhouette: draw the profile polyline (mirrored for full silhouette)
-    if mug_profile_svg:
-        right_side = list(mug_profile_svg)
-        left_side = [(-p[0], p[1]) for p in mug_profile_svg]  # mirror across x=0
-
-        silhouette = right_side + list(reversed(left_side))
-        d = _points_to_path_d(silhouette)
+    # Mug body silhouette (right half + mirror) from control polygon.
+    if body_bez_svg:
+        right_side = list(body_bez_svg)
+        left_side = [(-p[0], p[1]) for p in body_bez_svg]
+        d = _points_to_path_d(right_side + list(reversed(left_side)))
         if d:
-            _add_path(layer, d, PREVIEW_STYLE)
+            _add_path(layer, d, BODY_STYLE)
 
-    # Side rail width profile: mirror the rail across x=0 to form a filled polygon
+    # Handle rails (mm coords; convert back to SVG y).
+    from lib.units import to_mm  # noqa: E402
+
+    def _mm_to_svg_y(z_mm):
+        # Inverse of (vb_bottom - svg_y) * scale → mm
+        return vb_bottom - (z_mm / to_mm(scale, doc_units))
+
+    for rail in (inner_rail_mm, outer_rail_mm):
+        if not rail:
+            continue
+        pts_svg = [(p[0] / to_mm(scale, doc_units), _mm_to_svg_y(p[1]))
+                   for p in rail]
+        d = _points_to_path_d(pts_svg, closed=False)
+        if d:
+            _add_path(layer, d, RAIL_STYLE)
+
+    # Side rail width profile (mirror across x=0).
     if side_rail_svg:
         sorted_rail = sorted(side_rail_svg, key=lambda p: p[1])
         right_edge = [(p[0], p[1]) for p in sorted_rail]
         left_edge = [(-p[0], p[1]) for p in reversed(sorted_rail)]
-        polygon = right_edge + left_edge
-        d = _points_to_path_d(polygon)
+        d = _points_to_path_d(right_edge + left_edge)
         if d:
             _add_path(layer, d, SIDE_RAIL_STYLE)
-
-    # Handle footprint: project 3D cross-sections to XZ plane (SVG X, Z→SVG Y)
-    if handle_stations_3d:
-        # Endpoint stations (bold)
-        for poly_3d in [handle_stations_3d[0], handle_stations_3d[-1]]:
-            pts_2d = [(p[0], vb_bottom - p[2]) for p in poly_3d]
-            d = _points_to_path_d(pts_2d)
-            if d:
-                _add_path(layer, d, INDICATOR_STYLE)
-
-        # Intermediate stations (light), evenly spaced, up to 20 total
-        n_total = len(handle_stations_3d)
-        max_preview = 20
-        if n_total > 2:
-            step = max(1, (n_total - 1) // min(max_preview - 1, n_total - 1))
-            indices = set(range(0, n_total, step))
-            indices.add(n_total - 1)
-            indices.discard(0)
-            indices.discard(n_total - 1)  # endpoints already drawn bold
-            for idx in sorted(indices):
-                poly_3d = handle_stations_3d[idx]
-                pts_2d = [(p[0], vb_bottom - p[2]) for p in poly_3d]
-                d = _points_to_path_d(pts_2d)
-                if d:
-                    _add_path(layer, d, STATION_STYLE)
-
-        # Draw handle path (centroids)
-        if stations:
-            centroid_pts = [(s.centroid[0], vb_bottom - s.centroid[2]) for s in stations]
-            parts = [f"M {centroid_pts[0][0]:.4f},{centroid_pts[0][1]:.4f}"]
-            for p in centroid_pts[1:]:
-                parts.append(f"L {p[0]:.4f},{p[1]:.4f}")
-            d = " ".join(parts)
-            _add_path(layer, d, "fill:none;stroke:magenta;stroke-width:0.8;stroke-opacity:0.7")
-
-    # Funnel silhouette: right half mirrored to full silhouette
-    if funnel_outline_mm:
-        right_side = [(r, vb_bottom - z) for r, z in funnel_outline_mm]
-        left_side = [(-p[0], p[1]) for p in right_side]
-        silhouette = right_side + list(reversed(left_side))
-        d = _points_to_path_d(silhouette)
-        if d:
-            _add_path(layer, d, FUNNEL_STYLE)

@@ -8,22 +8,26 @@ from lib.scad_writer import run_all_emitters
 
 
 def _parse_scad_array(text: str, var_name: str) -> list:
-    """Simple parser: extract a variable assignment from .scad text and eval it."""
     pattern = rf'{var_name}\s*=\s*(\[[\s\S]*?\]);\s*$'
     match = re.search(pattern, text, re.MULTILINE)
     assert match, f"Could not find '{var_name}' in:\n{text[:200]}"
-    raw = match.group(1)
-    return eval(raw)  # noqa: S307 — test-only, trusted input
+    return eval(match.group(1))  # noqa: S307
 
 
 def _base_data(**overrides):
     """Minimal valid data dict for all emitters."""
     d = {
-        "mug_body_profile": [
-            [35.0, 100.0], [35.0, 5.0], [30.0, 0.0],
-            [0.0, 0.0], [0.0, 8.0], [30.0, 8.0], [30.0, 97.0],
+        "mug_body_profile_bez": [
+            [35.0, 100.0], [35.0, 70.0], [35.0, 40.0],
+            [35.0, 5.0], [33.0, 2.0], [30.0, 0.0],
+            [0.0, 0.0],
         ],
-        "handle_stations": [[[1, 2, 3], [4, 5, 6]]],
+        "mug_body_profile_closed": True,
+        "handle_inner_rail_bez": None,
+        "handle_outer_rail_bez": None,
+        "handle_profile_bez": None,
+        "handle_side_rail_polyline": None,
+        "handle_n_stations": None,
         "mug_params": {"fn": 0, "fa": 12, "fs": 2},
     }
     d.update(overrides)
@@ -36,23 +40,24 @@ class TestScadWriter:
 
         text = (tmp_path / "mug_body_profile.scad").read_text()
         assert "Auto-generated" in text
-        arr = _parse_scad_array(text, "mug_body_profile")
+        arr = _parse_scad_array(text, "mug_body_profile_bez")
         assert len(arr) == 7
         assert arr[0] == pytest.approx([35.0, 100.0], abs=1e-4)
-        assert arr[3] == pytest.approx([0.0, 0.0], abs=1e-4)
+        assert "mug_body_profile_closed = true" in text
 
-    def test_handle_stations(self, tmp_path):
-        stations = [
-            [[10.0, 0.0, 5.0], [20.0, 0.0, 5.0], [15.0, 3.0, 5.0]],
-            [[10.0, 0.0, 15.0], [20.0, 0.0, 15.0], [15.0, 3.0, 15.0]],
-        ]
-        run_all_emitters(_base_data(handle_stations=stations), tmp_path)
+    def test_handle_bezpaths(self, tmp_path):
+        run_all_emitters(_base_data(
+            handle_inner_rail_bez=[[40, 50], [45, 60], [50, 70], [55, 80]],
+            handle_outer_rail_bez=[[60, 50], [65, 60], [70, 70], [75, 80]],
+            handle_profile_bez=[[0, 0], [1, 0], [1, 1], [0, 1]],
+            handle_side_rail_polyline=[[3, 0], [3, 100]],
+            handle_n_stations=10,
+        ), tmp_path)
 
-        text = (tmp_path / "handle_stations.scad").read_text()
-        arr = _parse_scad_array(text, "handle_stations")
-        assert len(arr) == 2
-        assert len(arr[0]) == 3
-        assert arr[0][0] == pytest.approx([10.0, 0.0, 5.0], abs=1e-4)
+        text = (tmp_path / "handle_bezpaths.scad").read_text()
+        assert "handle_n_stations = 10" in text
+        inner = _parse_scad_array(text, "handle_inner_rail_bez")
+        assert inner[0] == pytest.approx([40, 50], abs=1e-4)
 
     def test_mug_params_fn(self, tmp_path):
         run_all_emitters(_base_data(mug_params={"fn": 64, "axis_x": 5.0}), tmp_path)
@@ -67,13 +72,6 @@ class TestScadWriter:
         text = (tmp_path / "mug_params.scad").read_text()
         assert "$fa = 6" in text
         assert "$fs = 1" in text
-
-    def test_handle_path_conditional(self, tmp_path):
-        run_all_emitters(_base_data(), tmp_path)
-        assert not (tmp_path / "handle_path.scad").exists()
-
-        run_all_emitters(_base_data(handle_path=[[1, 0, 2], [3, 0, 4]]), tmp_path)
-        assert (tmp_path / "handle_path.scad").exists()
 
     def test_mould_params_2part(self, tmp_path):
         run_all_emitters(_base_data(mug_params={
@@ -100,14 +98,12 @@ class TestScadWriter:
         assert "foot_concavity_z = 6" in text
         assert "foot_concavity_radius = 30" in text
 
-    def test_body_foot_idx_and_tube_height(self, tmp_path):
+    def test_filler_tube_height(self, tmp_path):
         run_all_emitters(_base_data(mug_params={
             "fn": 0, "fa": 12, "fs": 2,
-            "body_foot_idx": 3,
             "filler_tube_height": 15.0,
         }), tmp_path)
         text = (tmp_path / "mug_params.scad").read_text()
-        assert "body_foot_idx = 3" in text
         assert "filler_tube_height = 15" in text
 
     def test_alignment_type_natches(self, tmp_path):
@@ -136,10 +132,11 @@ class TestScadWriter:
         assert "key_tolerance = 0.5" in text
 
     def test_numeric_tolerance(self, tmp_path):
-        body = [[12.3456789, 98.7654321], [0.001, 0.002]]
-        run_all_emitters(_base_data(mug_body_profile=body), tmp_path)
+        bez = [[12.3456789, 98.7654321], [12, 80], [12, 60],
+               [10, 40], [8, 20], [4, 5], [0.001, 0.002]]
+        run_all_emitters(_base_data(mug_body_profile_bez=bez), tmp_path)
 
         text = (tmp_path / "mug_body_profile.scad").read_text()
-        arr = _parse_scad_array(text, "mug_body_profile")
-        assert arr[0] == pytest.approx(body[0], abs=1e-4)
-        assert arr[1] == pytest.approx(body[1], abs=1e-4)
+        arr = _parse_scad_array(text, "mug_body_profile_bez")
+        assert arr[0] == pytest.approx(bez[0], abs=1e-4)
+        assert arr[-1] == pytest.approx(bez[-1], abs=1e-4)

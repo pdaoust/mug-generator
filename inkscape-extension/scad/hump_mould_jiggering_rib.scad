@@ -6,6 +6,7 @@
 // The rib is oriented with rim at bottom (y = 0), foot at top.
 
 include <BOSL2/std.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -16,7 +17,8 @@ include <mug_body_profile.scad>
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_body = [for (p = mug_body_profile) p * _cs];
+_body = mug_body_polyline(mug_body_profile_bez, _cs);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 
 // =====================================================================
 // OUTER PROFILE (foot-first)
@@ -24,7 +26,7 @@ _body = [for (p = mug_body_profile) p * _cs];
 // _outer goes rim -> foot.  Reverse so it goes foot -> rim,
 // then flip y so the rim (opening) sits at y = 0.
 
-_outer_rim_first = [for (i = [0:body_foot_idx]) _body[i]];
+_outer_rim_first = [for (i = [0:_foot_idx]) _body[i]];
 _outer_unflipped = [for (i = [len(_outer_rim_first)-1:-1:0]) _outer_rim_first[i]];
 _outer_flip_y = max([for (p = _outer_unflipped) p[1]]);
 _outer = [for (p = _outer_unflipped) [p[0], _outer_flip_y - p[1]]];

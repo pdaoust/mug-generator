@@ -7,6 +7,7 @@
 // lip, and hooks down to max_x.
 
 include <BOSL2/std.scad>
+include <lib/handle_geom.scad>
 
 include <mug_params.scad>
 include <mug_body_profile.scad>
@@ -17,7 +18,8 @@ include <mug_body_profile.scad>
 
 _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 
-_body = [for (p = mug_body_profile) p * _cs];
+_body = mug_body_polyline(mug_body_profile_bez, _cs);
+_foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 
 // =====================================================================
 // PROFILES
@@ -26,10 +28,10 @@ _body = [for (p = mug_body_profile) p * _cs];
 // body[last] = rim (inner side).
 
 // Inner profile: foot -> rim
-_inner = [for (i = [body_foot_idx:len(_body)-1]) _body[i]];
+_inner = [for (i = [_foot_idx:len(_body)-1]) _body[i]];
 
 // Outer profile: rim -> foot (first few points are the lip/rim region)
-_outer_rim_first = [for (i = [0:body_foot_idx]) _body[i]];
+_outer_rim_first = [for (i = [0:_foot_idx]) _body[i]];
 
 _outer_max_x = max([for (p = _outer_rim_first) p[0]]);
 

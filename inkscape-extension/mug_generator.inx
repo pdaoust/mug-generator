@@ -93,6 +93,9 @@ are supported.
       <param name="filler_tube_height" type="float" min="5" max="50" precision="1"
              gui-text="Filler tube height (mm)"
              gui-description="Height of the pouring tube above the mug rim (only used with single closed body profile). 15-20mm recommended.">15.0</param>
+      <param name="filler_tube_angle" type="float" min="5.0" max="45.0" precision="1"
+             gui-text="Filler tube flare angle (°)"
+             gui-description="Flare angle of the filler tube from vertical. Larger values make the tube easier to pour into.">20.0</param>
     </page>
 
     <page name="pouring-funnel" gui-text="Pouring funnel">
@@ -157,7 +160,9 @@ are supported.
       <param name="export_prototype" type="bool"
              gui-text="Prototype (mug + handle)">true</param>
       <param name="export_case_mould" type="bool"
-             gui-text="Case mould">true</param>
+             gui-text="Case mould (original)">true</param>
+      <param name="export_case_mould_efficient" type="bool"
+             gui-text="Case mould (plaster-efficient, peelable)">true</param>
       <param name="export_funnel" type="bool"
              gui-text="Pouring funnel">true</param>
       <param name="export_slump_mould" type="bool"

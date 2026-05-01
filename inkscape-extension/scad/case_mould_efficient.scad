@@ -546,7 +546,10 @@ _handle_box_y_max = (len(_handle_outside_pts) > 0)
 _handle_box_z_min = (len(_handle_outside_pts) > 0)
     ? min([for (p = _handle_outside_pts) p[2]]) : 0;
 _handle_box_z_max = (len(_handle_outside_pts) > 0)
-    ? max([for (p = _handle_outside_pts) p[2]]) : 0;
+    ? max([
+        _cone_top_z + epsilon,
+        each [for (p = _handle_outside_pts) p[2]]
+    ]) : 0;
 
 // padding = plaster_thickness for inner shell, +wall_thickness for outer.
 module handle_shell_sweep(padding) {

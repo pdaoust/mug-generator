@@ -25,7 +25,7 @@ except ImportError:
 from lib.svg_layers import get_layer_paths_bez, get_layer_mark_bezpaths
 from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 from lib.bezier_eval import (
-    bezpath_length, bezpath_max_axis, bezpath_min_axis,
+    bezpath_length, bezpath_min_axis,
     detect_foot_concavity_bez, split_outer_bez_at_rim,
 )
 from lib.openscad_params import compute_n
@@ -50,9 +50,11 @@ class MugGeneratorEffect(inkex.EffectExtension):
         pars.add_argument("--key_tolerance", type=float, default=0.5)
         pars.add_argument("--filler_tube_height", type=float, default=15.0)
         pars.add_argument("--filler_tube_angle", type=float, default=20.0)
+        pars.add_argument("--funnel_style", type=str, default="plastic")
         pars.add_argument("--funnel_wall_angle", type=float, default=30.0)
         pars.add_argument("--funnel_wall", type=float, default=1.5)
         pars.add_argument("--flange_width", type=float, default=3.0)
+        pars.add_argument("--funnel_shelf_width", type=float, default=7.0)
         pars.add_argument("--breather_hole_dia", type=float, default=1.0)
         pars.add_argument("--breather_hole_count", type=int, default=6)
         pars.add_argument("--clay_shrinkage", type=float, default=10.0)
@@ -176,14 +178,13 @@ class MugGeneratorEffect(inkex.EffectExtension):
                     for p in bez
                 ])
 
-        # --- Foot concavity, lip / foot extrema (analytic on bezpath) ---
+        # --- Foot concavity and foot extremum (analytic on bezpath) ---
+        # Lip extremum is computed in OpenSCAD from the same bezpath; do
+        # not duplicate it here.
         outer_bez = split_outer_bez_at_rim(body_bez_mm)
         concavity = detect_foot_concavity_bez(outer_bez)
 
-        lip_pt = bezpath_max_axis(outer_bez, 1)
         foot_pt = bezpath_min_axis(outer_bez, 1)
-        z_lip = lip_pt[1]
-        lip_r = lip_pt[0]
         z_min = foot_pt[1]
 
         shrinkage_pct = self.options.clay_shrinkage
@@ -195,9 +196,11 @@ class MugGeneratorEffect(inkex.EffectExtension):
             "wall_thickness": self.options.wall_thickness,
             "natch_radius": self.options.natch_radius,
             "key_tolerance": self.options.key_tolerance,
+            "funnel_style": self.options.funnel_style,
             "funnel_wall_angle": self.options.funnel_wall_angle,
             "funnel_wall": self.options.funnel_wall,
             "flange_width": self.options.flange_width,
+            "funnel_shelf_width": self.options.funnel_shelf_width,
             "breather_hole_dia": self.options.breather_hole_dia,
             "breather_hole_count": self.options.breather_hole_count,
         }
@@ -215,15 +218,16 @@ class MugGeneratorEffect(inkex.EffectExtension):
         )
         mould_params["needs_base"] = needs_base
         mould_params["z_min_scaled"] = z_min * cs
-        mould_params["z_lip_scaled"] = z_lip * cs
-        mould_params["lip_r_scaled"] = lip_r * cs
 
         opt = self.options
+        # Integrated funnel is part of the case mould itself, so the
+        # separate plastic funnel is not produced.
+        funnel_export = bool(opt.export_funnel) and opt.funnel_style != "integrated"
         exports = {
             "prototype": bool(opt.export_prototype),
             "case_mould": bool(opt.export_case_mould),
             "case_mould_efficient": bool(opt.export_case_mould_efficient),
-            "funnel": bool(opt.export_funnel),
+            "funnel": funnel_export,
             "slump_mould": bool(opt.export_slump_mould),
             "slump_rib": bool(opt.export_slump_mould and opt.export_slump_rib),
             "hump_mould": bool(opt.export_hump_mould),

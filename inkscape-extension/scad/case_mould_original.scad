@@ -37,6 +37,11 @@ _cs = clay_shrinkage_pct > 0 ? 100 / (100 - clay_shrinkage_pct) : 1;
 _body = mug_body_polyline(mug_body_profile_bez, _cs);
 _foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 
+// Lip point derived analytically from the bezpath (not from Python).
+_lip_pt_scaled = lip_pt_scaled(mug_body_profile_bez, _cs);
+z_lip_scaled = _lip_pt_scaled[1];
+lip_r_scaled = _lip_pt_scaled[0];
+
 _hstations_raw = handle_enabled
     ? let(
         raw = sample_rails_bez(handle_inner_rail_bez, handle_outer_rail_bez,
@@ -60,7 +65,15 @@ _mpoints = _mark_data[0];
 _mark_paths_idx = _mark_data[1];
 _axis = mug_axis_x * _cs;
 _mark_depth = mark_depth * _cs;
-_tube_h = filler_tube_height;
+// When funnel_style is "integrated", the case mould includes the funnel
+// itself, so the gap from the rim to the top of the plaster is one
+// plaster_thickness (the funnel cone is carved into that plaster) and the
+// cone uses funnel_wall_angle.  When "plastic", the gap is the height of
+// the printed filler tube and the slant uses filler_tube_angle.
+_integrated = funnel_style == "integrated";
+_tube_h = _integrated ? plaster_thickness : filler_tube_height;
+_tube_angle = _integrated ? funnel_wall_angle : filler_tube_angle;
+_shelf_w = _integrated ? funnel_shelf_width : 0;
 
 // =====================================================================
 // DERIVED PROFILES
@@ -77,12 +90,20 @@ _outer = [for (i = [0:_foot_idx]) _body[i]];
 _split_r = _body[0][0];
 _split_z = _body[0][1];
 _tube_top_z = _split_z + _tube_h;
-_tube_top_r = _split_r + _tube_h * tan(filler_tube_angle);
+// For an integrated funnel, the cone starts at (_split_r + _shelf_w) at
+// the rim and flares outward at funnel_wall_angle from there; the
+// horizontal step from _split_r out to _split_r + _shelf_w is the shelf
+// (a plaster overhang into the cavity acting as a knife-edge).
+_tube_top_r = _split_r + _shelf_w + _tube_h * tan(_tube_angle);
 
 _mould_profile = concat(
     [for (i = [0:_foot_idx]) _body[i]],
-    [[0,           _tube_top_z],
-     [_tube_top_r, _tube_top_z]]
+    _integrated && _shelf_w > 0
+        ? [[0,                       _tube_top_z],
+           [_tube_top_r,             _tube_top_z],
+           [_split_r + _shelf_w,     _split_z]]
+        : [[0,           _tube_top_z],
+           [_tube_top_r, _tube_top_z]]
 );
 
 // =====================================================================
@@ -855,8 +876,8 @@ _v_mug_capacity = abs(vnf_volume(_vnf_inner));
 // inner rim z and outer rim z), so this slab cannot overlap the mug
 // cavity regardless of rim roll-over shape.
 _rim_top_z = max(_split_z, _body[len(_body)-1][1]);
-_slip_r_at_rim = _split_r
-    + (_rim_top_z - _split_z) * tan(filler_tube_angle);
+_slip_r_at_rim = _split_r + _shelf_w
+    + (_rim_top_z - _split_z) * tan(_tube_angle);
 _slip_tube = _rim_top_z < _tube_top_z ? [
     [0,              _rim_top_z],
     [_slip_r_at_rim, _rim_top_z],

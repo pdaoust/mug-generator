@@ -93,15 +93,24 @@ are supported.
     </page>
 
     <page name="pouring-funnel" gui-text="Pouring funnel">
+      <param name="funnel_style" type="optiongroup" appearance="combo"
+             gui-text="Funnel style"
+             gui-description="Plastic: separate 3D-printed funnel that sits in the case mould's pour hole. Integrated: funnel is built into the case mould itself; no separate funnel piece is exported.">
+        <option value="plastic">Plastic funnel</option>
+        <option value="integrated">Integrated</option>
+      </param>
       <param name="funnel_wall_angle" type="float" min="10" max="60" precision="1"
              gui-text="Funnel wall angle (°)"
-             gui-description="Cone wall angle from vertical">45.0</param>
+             gui-description="Cone wall angle from vertical">30.0</param>
       <param name="funnel_wall" type="float" min="0.4" max="5.0" precision="1"
              gui-text="Funnel wall thickness (mm)"
-             gui-description="Thickness of the funnel shell walls">1.2</param>
+             gui-description="Thickness of the funnel shell walls. Only used by the plastic funnel.">1.2</param>
       <param name="flange_width" type="float" min="2" max="20" precision="1"
              gui-text="Funnel flange width (mm)"
-             gui-description="Flange overhang beyond pouring hole. This keeps the funnel from falling too far into the mould as the mould wears out over time.">6.0</param>
+             gui-description="Flange overhang beyond pouring hole. This keeps the funnel from falling too far into the mould as the mould wears out over time. Only used by the plastic funnel.">6.0</param>
+      <param name="funnel_shelf_width" type="float" min="0" max="20" precision="1"
+             gui-text="Funnel shelf width (mm)"
+             gui-description="Width of the inward plaster shelf at the bottom of an integrated funnel cone, sitting just above the mug rim. Acts as a cutting edge to trim slip. Set to 0 for no shelf. Only used by the integrated funnel.">7.0</param>
       <param name="breather_hole_dia" type="float" min="0.5" max="5.0" precision="1"
              gui-text="Breather hole diameter (mm)"
              gui-description="Diameter of holes in lip form. This lets air escape from the lip form as slip fills the mould.">1.0</param>

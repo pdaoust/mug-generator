@@ -33,13 +33,18 @@ _body = mug_body_polyline(mug_body_profile_bez, _cs);
 _foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 _tube_h = filler_tube_height;
 
+// Lip point derived analytically from the bezpath (not from Python).
+_lip_pt_scaled = lip_pt_scaled(mug_body_profile_bez, _cs);
+z_lip_scaled = _lip_pt_scaled[1];
+lip_r_scaled = _lip_pt_scaled[0];
+
 // =====================================================================
 // DERIVED PROFILES
 // =====================================================================
 
 _outer = [for (i = [0:_foot_idx]) _body[i]];
-_split_r = _body[0][0];
-_split_z = _body[0][1];
+_split_r = lip_r_scaled;
+_split_z = z_lip_scaled;
 _tube_top_z = _split_z + _tube_h;
 _tube_top_r = _split_r + _tube_h * tan(filler_tube_angle);
 
@@ -230,6 +235,9 @@ module pouring_funnel() {
 }
 
 // Flip upside down for printing, with cone top at Z=0.
-translate([0, 0, cone_base_z + cone_height])
-    rotate([180, 0, 0])
-        pouring_funnel();
+// Suppressed when funnel_style is "integrated" — the funnel is then
+// built into the case mould and no separate piece is needed.
+if (funnel_style == "plastic")
+    translate([0, 0, cone_base_z + cone_height])
+        rotate([180, 0, 0])
+            pouring_funnel();

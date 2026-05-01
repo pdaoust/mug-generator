@@ -32,6 +32,11 @@ _body = mug_body_polyline(mug_body_profile_bez, _cs);
 _foot_idx = mug_foot_idx(_body, mug_body_profile_bez, _cs);
 _foot_inflection_idx = mug_foot_inflection_idx(_body, _foot_idx);
 
+// Lip point derived analytically from the bezpath (not from Python).
+_lip_pt_scaled = lip_pt_scaled(mug_body_profile_bez, _cs);
+z_lip_scaled = _lip_pt_scaled[1];
+lip_r_scaled = _lip_pt_scaled[0];
+
 // Coarse body polyline for the shell revolve — same source bezpath
 // at fa=30, fs=2 instead of the body positive's render-time dials.
 // Shell surfaces live inside plaster, so the lower fidelity is invisible.
@@ -207,28 +212,57 @@ _body_outer_pts_fine = _walk_outer_side(_body_polyline_fine,
 // than 8 mm) keeps the silhouette recognizably mug-shaped while
 // dropping segment count to a fraction of the body-positive polyline.
 _shell_polyline = bez_to_polyline(mug_body_profile_bez, closed=true,
-                                   fa=90, fs=15);
+                                   fa=120, fs=30);
 _body_outer_pts_shell = _walk_outer_side(_shell_polyline,
     min([for (p = _shell_polyline) p[1]]));
+
+// Above the mug rim there's a cone — either the integrated plaster
+// funnel (carved out of plaster, slope = funnel_wall_angle, sitting
+// behind a funnel_shelf_width plaster overhang) or the printed plastic
+// filler tube's outer surface (slope = filler_tube_angle, no shelf).
+// Both cases share a wrap geometry: clip the body offset at z_lip and
+// extend the printed shell above the rim as an explicit frustum.  The
+// frustum's bottom radius is taken from the body offset itself at z_lip
+// so the printed shell wall is continuous (no annular gap that would
+// let plaster leak out); its top sits _funnel_pour_gap mm radially
+// outside the cone's top, capping the plaster sleeve thickness above.
+_integrated_funnel = funnel_style == "integrated";
+_top_gap     = filler_tube_height;
+_tube_angle  = _integrated_funnel ? funnel_wall_angle  : filler_tube_angle;
+_shelf_w     = _integrated_funnel ? funnel_shelf_width : 0;
+_cone_top_r  = lip_r_scaled + _shelf_w + _top_gap * tan(_tube_angle);
+_cone_top_z  = z_lip_scaled + _top_gap;
+_funnel_pour_gap = 20;
 
 // Build the closed (lip → foot → axis → back to lip) polygon used by
 // offset() for the revolve.  ``outer_pts`` is the outer-side polyline
 // in fired coords (use _body_outer_pts_fine or _body_outer_pts_shell).
 function scaled_closed_profile(bottom_extend = 0,
-                               outer_pts = _body_outer_pts_fine) =
+                               outer_pts = _body_outer_pts_fine,
+                               with_funnel_top = false) =
     let(
         raw = [for (p = outer_pts) [p[0] * _cs, p[1] * _cs]],
         z_bot = z_min_scaled - bottom_extend,
         foot_r = raw[len(raw) - 1][0],
-        closed = bottom_extend > 0
-            ? concat(raw,
-                     [[foot_r, z_bot],
-                      [0,      z_bot],
-                      [0,      z_lip_scaled]])
-            : concat(raw,
-                     [[0, z_min_scaled],
-                      [0, z_lip_scaled]])
-    ) closed;
+        // Bottom closure: foot → axis at foot.
+        bottom_close = bottom_extend > 0
+            ? [[foot_r, z_bot], [0, z_bot]]
+            : [[0, z_min_scaled]],
+        // Top closure: when with_funnel_top, extend the polygon up the
+        // axis past the rim, across the cone top, down the cone slope
+        // to the shelf bottom radius at z_lip, then implicit close to
+        // raw[0] at the rim — the close edge is the cutting-edge shelf.
+        // When _shelf_w == 0 the cone bottom radius equals raw[0][0],
+        // so the shelf-step point is collapsed.
+        top_close = with_funnel_top
+            ? (_shelf_w > 0
+                ? [[0, _cone_top_z],
+                   [_cone_top_r, _cone_top_z],
+                   [lip_r_scaled + _shelf_w, z_lip_scaled]]
+                : [[0, _cone_top_z],
+                   [_cone_top_r, _cone_top_z]])
+            : [[0, z_lip_scaled]]
+    ) concat(raw, bottom_close, top_close);
 
 // BOSL2 offset() on a closed polygon handles self-intersection and
 // miter cases for us.  Large outsets (plaster_thickness + wall_thickness
@@ -271,10 +305,11 @@ function snap_axis_stub(pts, d) =
           [abs(p[0] - inset) < _axis_eps ? 0 : p[0], p[1]]];
 
 function offset_profile(d, bottom_extend = 0,
-                        outer_pts = _body_outer_pts_fine) =
+                        outer_pts = _body_outer_pts_fine,
+                        with_funnel_top = false) =
     clamp_to_axis(snap_axis_stub(
-        d == 0 ? scaled_closed_profile(bottom_extend, outer_pts)
-               : offset(scaled_closed_profile(bottom_extend, outer_pts),
+        d == 0 ? scaled_closed_profile(bottom_extend, outer_pts, with_funnel_top)
+               : offset(scaled_closed_profile(bottom_extend, outer_pts, with_funnel_top),
                         r = d, closed = true),
         d));
 
@@ -331,19 +366,57 @@ module filler_tube_outer() {
     // Sink the bottom below z_lip by epsilon so it overlaps the revolve
     // rather than sharing a coincident disc face at z=z_lip — coincident
     // faces trip CGAL Nef union (applyUnion3D assertion).
-    r_bot = lip_r_scaled;
-    h = filler_tube_height + epsilon;
-    r_top = r_bot + h * tan(filler_tube_angle);
+    r_bot = lip_r_scaled + _shelf_w;
+    h = _top_gap + epsilon;
+    r_top = r_bot + h * tan(_tube_angle);
     translate([0, 0, z_lip_scaled - epsilon])
         cyl(h = h, r1 = r_bot, r2 = r_top, anchor = BOTTOM);
 }
 
+// Solid disk forming the wall above the cutting-edge shelf.  The shelf
+// is the horizontal annulus at z_lip from r=lip_r out to r=lip_r+shelf_w;
+// the slab sits above it (z_lip to z_lip+wall_thickness) giving the
+// shelf wt-thick plastic above.  Below z_lip is the mug body / lip, so
+// putting the slab below would eat into the lip itself.
+module shelf_solid() {
+    if (_shelf_w > 0)
+        translate([0, 0, z_lip_scaled - epsilon])
+            cylinder(h = wall_thickness + 2 * epsilon,
+                     r = lip_r_scaled + _shelf_w);
+}
+
 module filler_tube_inner() {
-    r_bot = lip_r_scaled - wall_thickness;
-    h = filler_tube_height + wall_thickness + 2 * epsilon;
-    r_top = r_bot + h * tan(filler_tube_angle);
-    translate([0, 0, z_lip_scaled - wall_thickness - epsilon])
+    // Inner cone is parallel to the outer cone, offset perpendicular by
+    // wall_thickness.  For a cone wall tilted _tube_angle from vertical,
+    // a perpendicular inset of wt corresponds to a radial inset of
+    // wt / cos(_tube_angle) at any given z.
+    //
+    // For an integrated funnel with a shelf, the inner cone must stop
+    // ABOVE the shelf slab (z_lip + wt) — otherwise it would carve
+    // through the slab and leave the shelf with no plastic thickness.
+    // The pour_hole_cylinder handles slip flow through the slab.
+    inset_r = wall_thickness / cos(_tube_angle);
+    r_at_lip = lip_r_scaled + _shelf_w - inset_r;
+    bot_z = (_integrated_funnel && _shelf_w > 0)
+        ? z_lip_scaled + wall_thickness - epsilon
+        : z_lip_scaled - wall_thickness - epsilon;
+    r_bot = r_at_lip + (bot_z - z_lip_scaled) * tan(_tube_angle);
+    h = (z_lip_scaled + _top_gap + epsilon) - bot_z;
+    r_top = r_bot + h * tan(_tube_angle);
+    translate([0, 0, bot_z])
         cyl(h = h, r1 = r_bot, r2 = r_top, anchor = BOTTOM);
+}
+
+// Vertical cylindrical pour hole through the shelf slab, connecting the
+// mug interior (below) to the funnel cone interior (above).  Radius
+// equals the mug rim's inner radius (lip_r - wall_thickness) so the
+// cylinder meets revolve(-wall_thickness) cleanly at z_lip - wt.  Used
+// only with an integrated funnel that has a non-zero shelf.
+module pour_hole_cylinder() {
+    if (_integrated_funnel && _shelf_w > 0)
+        translate([0, 0, z_lip_scaled - wall_thickness - epsilon])
+            cylinder(h = 2 * wall_thickness + 2 * epsilon,
+                     r = lip_r_scaled - wall_thickness);
 }
 
 // =====================================================================
@@ -509,18 +582,22 @@ _v_handle_shell_tube_scad = handle_enabled
 module mug_positive_solid() {
     union() {
         revolve(0);
+        shelf_solid();
         filler_tube_outer();
         handle_skin(_hstations_body_pos);
     }
 }
 
-// The inward-offset profile's horizontal bottom closure rides up to
-// z_min + wt after offsetting, leaving a 1.5*wt-thick spurious plaster
-// floor in the A/B diff (from the clip plane at z_min - wt/2 up to
-// z_min + wt).  Extending the pre-offset bottom by 1.5*wt + epsilon
-// puts the post-offset floor at z_min - wt/2 - epsilon, just below the
-// clip plane, so the A/B diff consumes it entirely.
-_inner_wall_bottom_extend = 1.5 * wall_thickness + epsilon;
+// A/B floor thickness — each half must hold plaster on its own.  Defined
+// here (before inner-wall bottom extend) so the latter can reference it.
+_ab_floor_thickness = wall_thickness;
+
+// The inward-offset profile's horizontal bottom closure rides up after
+// offsetting (by roughly wt, but corner arcs and miter geometry can
+// inflate that).  Push the pre-offset bottom well below the A/B clip
+// plane so the post-offset inner-wall floor is guaranteed to lie below
+// the clip — any extra extension is sliced off by the half-space.
+_inner_wall_bottom_extend = _ab_floor_thickness + 4 * wall_thickness;
 
 module mug_inner_wall_solid() {
     // The revolve + filler_tube_inner pair shares a face along their
@@ -532,6 +609,7 @@ module mug_inner_wall_solid() {
         render()
             union() {
                 revolve(-wall_thickness, bottom_extend = _inner_wall_bottom_extend);
+                pour_hole_cylinder();
                 filler_tube_inner();
             }
         handle_skin(_hstations_body_inner, target_offset = -wall_thickness, snap_overlap = true);
@@ -542,7 +620,7 @@ module mug_inner_wall_solid() {
 // can be poured in through the filler opening: the mug positive's inner
 // filler tube extends above this cap and carves the pour path through to
 // the mug cavity.
-_shell_top_z = z_lip_scaled + filler_tube_height;
+_shell_top_z = z_lip_scaled + _top_gap;
 
 // Shell and outer-shell are the large plaster-cavity surfaces; their
 // angular tessellation dominates render time but their fidelity is not
@@ -551,13 +629,51 @@ _shell_top_z = z_lip_scaled + filler_tube_height;
 // handle shell is synthesized as a circular-tube path_sweep2d.
 _shell_fa = 45;
 
+// Frustum that wraps the cone above the mug rim — applies in both
+// integrated and plastic modes.  Bottom radius is taken from the body
+// offset's actual outer radius at z_lip (computed via _offset_x_at_z)
+// so the printed shell wall is continuous across the rim with no
+// annular gap; top radius sits _funnel_pour_gap mm outside the cone
+// at the cone's top.  ``extra`` = 0 for inner shell, wall_thickness
+// for outer shell.  Extends slightly below z_lip to overlap the
+// (clipped) body offset and slightly above _cone_top_z (the latter is
+// sliced off by the shell's half-space cap at _shell_top_z).
+function _shell_outer_r_at_lip(d) =
+    _offset_x_at_z(offset_profile(d, 0, _body_outer_pts_shell),
+                   z_lip_scaled);
+
+module funnel_wrap_frustum(extra = 0) {
+    bot_r = _shell_outer_r_at_lip(plaster_thickness + extra);
+    top_r = _cone_top_r + _funnel_pour_gap + extra;
+    h = _top_gap + 2 * epsilon;
+    slope = (top_r - bot_r) / _top_gap;
+    r1 = bot_r - slope * epsilon;
+    r2 = top_r + slope * epsilon;
+    translate([0, 0, z_lip_scaled - epsilon])
+        cyl(h = h, r1 = r1, r2 = r2, anchor = BOTTOM,
+            $fa = _shell_fa, $fn = 0, $fs = 2);
+}
+
+// Body-offset revolve, clipped at z = z_lip.  The body offset's
+// natural dome above the rim curves inward toward the axis as z rises;
+// rather than letting that dome intersect the funnel cone in
+// unpredictable ways, we clip it off and let funnel_wrap_frustum
+// define everything above the rim.
+module body_offset_revolve(d) {
+    intersection() {
+        rotate_extrude(angle = 360, convexity = 4,
+                       $fa = _shell_fa, $fn = 0, $fs = 2)
+            polygon(offset_profile(d, 0, _body_outer_pts_shell));
+        translate([-1000, -1000, -1000])
+            cube([2000, 2000, 1000 + z_lip_scaled + epsilon]);
+    }
+}
+
 module shell_solid_geom() {
     difference() {
         union() {
-            rotate_extrude(angle = 360, convexity = 4,
-                           $fa = _shell_fa, $fn = 0, $fs = 2)
-                polygon(offset_profile(plaster_thickness, 0,
-                                       _body_outer_pts_shell));
+            body_offset_revolve(plaster_thickness);
+            funnel_wrap_frustum(0);
             handle_shell_sweep(_handle_shell_padding_inner);
         }
         half_space_z_pos(_shell_top_z);
@@ -567,10 +683,8 @@ module shell_solid_geom() {
 module shell_outer_wall_solid() {
     difference() {
         union() {
-            rotate_extrude(angle = 360, convexity = 4,
-                           $fa = _shell_fa, $fn = 0, $fs = 2)
-                polygon(offset_profile(plaster_thickness + wall_thickness, 0,
-                                       _body_outer_pts_shell));
+            body_offset_revolve(plaster_thickness + wall_thickness);
+            funnel_wrap_frustum(wall_thickness);
             handle_shell_sweep(_handle_shell_padding_outer);
         }
         half_space_z_pos(_shell_top_z);
@@ -607,8 +721,6 @@ module half_space_z_pos(z_cut) {
 // is flush at Y=0 and Z=z_min.  Subtraction leaves a wt-thick seam wall
 // and a (wt/2)-thick floor — independent of ``needs_base``, since each
 // half must hold plaster on its own when poured.
-
-_ab_floor_thickness = wall_thickness / 2;
 
 module ab_raw() {
     difference() {
@@ -673,7 +785,7 @@ function _mug_r_at_z(z) =
 // exact for vertical walls; close enough for gently tapered walls).
 function _feature_x_at_z(z) = _mug_r_at_z(z) + plaster_thickness / 2;
 
-_f1_z = z_lip_scaled + filler_tube_height - plaster_thickness / 2;
+_f1_z = z_lip_scaled - plaster_thickness / 2;
 _f2_z = z_min_scaled + (needs_base ? wall_thickness : 0) + plaster_thickness / 2;
 _f3_z = (z_min_scaled + z_lip_scaled) / 2;
 
@@ -884,7 +996,7 @@ module b_part() {
 // plaster's cast-bottom face — which becomes the plaster piece's
 // use-face (the surface that touches the mug's foot) once flipped.
 
-_ab_floor_thickness_ref = wall_thickness / 2;  // mirror of _ab_floor_thickness
+_ab_floor_thickness_ref = _ab_floor_thickness;  // mirror of _ab_floor_thickness
 _base_total_h = plaster_thickness + _ab_floor_thickness_ref;
 _base_z_top = z_min_scaled;
 _base_z_bot = _base_z_top - _base_total_h;
@@ -1034,16 +1146,18 @@ module base_part() {
 
 _vol_fn = 24;
 
-_vnf_shell_axi = rotate_sweep(offset_profile(plaster_thickness), $fn=_vol_fn);
+_vnf_shell_axi = rotate_sweep(
+    offset_profile(plaster_thickness, outer_pts = _body_outer_pts_shell),
+    $fn=_vol_fn);
 _vnf_mug_axi   = rotate_sweep(offset_profile(0),                 $fn=_vol_fn);
 _v_shell_axi = abs(vnf_volume(_vnf_shell_axi));
 _v_mug_axi   = abs(vnf_volume(_vnf_mug_axi));
 
 // Filler tube portion lying inside the axisymmetric shell halo
 // (z_lip .. z_lip + plaster_thickness).
-_ft_r_bot    = lip_r_scaled;
-_ft_h_in     = min(filler_tube_height, plaster_thickness);
-_ft_r_top_in = _ft_r_bot + _ft_h_in * tan(filler_tube_angle);
+_ft_r_bot    = lip_r_scaled + _shelf_w;
+_ft_h_in     = min(_top_gap, plaster_thickness);
+_ft_r_top_in = _ft_r_bot + _ft_h_in * tan(_tube_angle);
 _v_filler_in = (PI * _ft_h_in / 3)
     * (_ft_r_bot*_ft_r_bot + _ft_r_bot*_ft_r_top_in + _ft_r_top_in*_ft_r_top_in);
 

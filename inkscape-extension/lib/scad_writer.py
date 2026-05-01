@@ -189,6 +189,14 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
     if want_filler_tube and "filler_tube_angle" in params:
         lines.append(f"filler_tube_angle = {params['filler_tube_angle']:.6f};\n")
 
+    # funnel_style and funnel_shelf_width are consumed by the case mould
+    # (to switch between plastic-funnel and integrated-funnel geometry)
+    # and by funnel.scad (which suppresses itself when integrated).
+    if want_filler_tube and "funnel_style" in params:
+        lines.append(f'funnel_style = "{params["funnel_style"]}";\n')
+    if want_filler_tube and "funnel_shelf_width" in params:
+        lines.append(f"funnel_shelf_width = {params['funnel_shelf_width']:.6f};\n")
+
     # Case-mould-only parameters
     if want_case_mould:
         if "alignment_type" in params:
@@ -208,14 +216,18 @@ def _emit_mug_params(data: dict[str, Any], output_dir: Path) -> None:
             lines.append(
                 f"needs_base = {'true' if params['needs_base'] else 'false'};\n"
             )
-        for key in ("z_min_scaled", "z_lip_scaled", "lip_r_scaled"):
-            if key in params:
-                lines.append(f"{key} = {params[key]:.6f};\n")
+        if "z_min_scaled" in params:
+            lines.append(f"z_min_scaled = {params['z_min_scaled']:.6f};\n")
 
-    # Funnel parameters
+    # funnel_wall_angle is consumed both by funnel.scad (for the plastic
+    # funnel cone) and by the case mould (for the integrated funnel cone),
+    # so emit it whenever either is wanted.
+    if (want_funnel or want_filler_tube) and "funnel_wall_angle" in params:
+        lines.append(f"funnel_wall_angle = {params['funnel_wall_angle']:.6f};\n")
+
+    # Plastic-funnel-only parameters
     if want_funnel:
-        for key in ("funnel_wall_angle", "funnel_wall", "flange_width",
-                     "breather_hole_dia"):
+        for key in ("funnel_wall", "flange_width", "breather_hole_dia"):
             if key in params:
                 lines.append(f"{key} = {params[key]:.6f};\n")
         if "breather_hole_count" in params:

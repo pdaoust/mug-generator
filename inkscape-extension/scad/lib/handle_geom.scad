@@ -225,6 +225,13 @@ function bezpath_max_axis(bez, axis) =
     let(pts = bezpath_extrema_axis(bez, axis))
     pts[search(max([for (p = pts) p[axis]]), [for (p = pts) p[axis]])[0]];
 
+// Lip point of a closed mug body bezpath, scaled by clay shrinkage cs.
+// Drawing convention (outer wall → rim → inner wall → floor) means the
+// first max-Z extremum encountered in path order is on the outer side,
+// so it has the largest r among any z-tied points.
+function lip_pt_scaled(bez, cs) =
+    let(p = bezpath_max_axis(bez, 1)) [p[0] * cs, p[1] * cs];
+
 // All on-curve radii where the bezpath crosses height z.  Each segment
 // contributes 0–3 crossings (real roots of the per-segment cubic in u
 // against y=z); we return the maximum, which corresponds to the outer

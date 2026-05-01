@@ -17,7 +17,7 @@ import pytest
 from lib.svg_layers import get_layer_paths_bez, get_layer_mark_bezpaths
 from lib.units import to_mm, parse_doc_units, parse_viewbox_bottom, parse_viewbox_scale
 from lib.bezier_eval import (
-    bezpath_length, bezpath_max_axis, bezpath_min_axis,
+    bezpath_length, bezpath_min_axis,
     detect_foot_concavity_bez, split_outer_bez_at_rim,
 )
 from lib.openscad_params import compute_n
@@ -109,10 +109,7 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
 
     outer_bez = split_outer_bez_at_rim(body_bez_mm)
     concavity = detect_foot_concavity_bez(outer_bez)
-    lip_pt = bezpath_max_axis(outer_bez, 1)
     foot_pt = bezpath_min_axis(outer_bez, 1)
-    z_lip = lip_pt[1]
-    lip_r = lip_pt[0]
     z_min = foot_pt[1]
 
     cs = 100.0 / (100.0 - clay_shrinkage) if clay_shrinkage > 0 else 1.0
@@ -123,9 +120,11 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
         "wall_thickness": 0.8,
         "natch_radius": 6.75,
         "key_tolerance": 0.5,
+        "funnel_style": "plastic",
         "funnel_wall_angle": 30.0,
         "funnel_wall": 1.5,
         "flange_width": 3.0,
+        "funnel_shelf_width": 7.0,
         "breather_hole_dia": 1.0,
         "breather_hole_count": 6,
         "mark_depth": mark_depth,
@@ -146,8 +145,6 @@ def _run_pipeline(svg_path: Path, output_dir: Path, fn=0, fa=12, fs=2,
     needs_base = bool(concavity) or bool(mark_enabled and mark_inset)
     mould_params["needs_base"] = needs_base
     mould_params["z_min_scaled"] = z_min * cs
-    mould_params["z_lip_scaled"] = z_lip * cs
-    mould_params["lip_r_scaled"] = lip_r * cs
 
     exports_resolved = dict(DEFAULT_EXPORTS)
     if exports is not None:
@@ -255,8 +252,7 @@ class TestIntegration:
     def test_efficient_mould_derived_params(self, tmp_path):
         _run_pipeline(FIXTURE_SVG, tmp_path, fn=20, clay_shrinkage=10.0)
         text = (tmp_path / "mug_params.scad").read_text()
-        for key in ("needs_base", "z_min_scaled", "z_lip_scaled",
-                    "lip_r_scaled"):
+        for key in ("needs_base", "z_min_scaled"):
             assert key in text
 
         # Fixture has a plain cylindrical foot (no concavity, no mark).
